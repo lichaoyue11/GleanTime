@@ -10,7 +10,10 @@
 Component({
   properties: {
     recId: { type: Number, value: 0 },
+    /* leaveDate 为「展示文本」（如 2026-10-05 · 周一）；iso 为真实日期，供页面
+       做撤销/编辑时的数据比对（不可拿展示文本去比对存储里的 ISO 日期）。 */
     leaveDate: { type: String, value: '' },
+    iso: { type: String, value: '' },
     delLabel: { type: String, value: '删除' },
     closeToken: { type: Number, value: 0 },
     openKey: { type: String, value: '' }
@@ -99,11 +102,11 @@ Component({
     },
     onEdit: function () {
       if (this._suppress || !this.data.open) return;  // 未滑出或拖拽后误触：忽略
-      this.triggerEvent('edit', { recId: this.data.recId, leaveDate: this.data.leaveDate });
+      this.triggerEvent('edit', { recId: this.data.recId, leaveDate: this.data.leaveDate, iso: this.data.iso });
     },
     onDelete: function () {
       if (this._suppress || !this.data.open) return;
-      this.triggerEvent('delete', { recId: this.data.recId, leaveDate: this.data.leaveDate });
+      this.triggerEvent('delete', { recId: this.data.recId, leaveDate: this.data.leaveDate, iso: this.data.iso });
     },
     onContentTap: function () {
       if (this._suppress) return;

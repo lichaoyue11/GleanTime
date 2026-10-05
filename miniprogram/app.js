@@ -5,7 +5,7 @@ const privacy = require('./utils/privacy.js');
 App({
   globalData: {
     appName: '拾时簿 GleanTime',
-    appVersion: 'v1.1.0',
+    appVersion: 'v1.1.1',
     store: store
   },
   onLaunch: function () {

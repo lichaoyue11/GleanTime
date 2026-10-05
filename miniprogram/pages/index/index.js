@@ -88,6 +88,10 @@ Page({
     imp: { show: false, title: '数据导入', sub: '选择导入方式，数据按记录 ID 合并还原到本机。' },
     exp: { show: false, title: '数据导出', sub: '备份文件已生成，请选择导出方式', file: '', meta: '', raw: '', path: '' },
 
+    /* 弹层下拉关闭：拖动顶部把手时把位移写进 sheetDrag.style（name 标记当前被拖的弹层），
+       松手后按位移阈值决定「回弹」还是「关闭」。 */
+    sheetDrag: { name: '', style: '' },
+
     dd: { show: false, up: false, type: 'sel', top: 0, left: 0, width: 0, selTarget: '', openTarget: '', options: [], hours: [], minutes: [], hourSel: '', minuteSel: '' },
     dp: { show: false, view: 'date', y: 2026, m: 1, title: '', cells: [] },
 
@@ -119,6 +123,11 @@ Page({
     this._ddTarget = null; this._dpTarget = '';
     this._picks = {};
     this._editingId = null; this._validTouched = false; this._editingLeave = null;
+    /* _timeTouched：用户是否手动改过「起止时间」。未改过时，切换加班日期会按新日期的
+       工作日/休息日重新套用默认时段（周一~周五 18:30-21:00 / 周末 09:00-18:00）；
+       改过之后则保留用户输入，仅实时重算时长，避免把手工填的时间冲掉。 */
+    this._timeTouched = false;
+    this._dragSheet = null; this._dragY = 0; this._dragMoved = false;
     this._toastTimer = null;
     this.renderAll();
   },
@@ -226,7 +235,9 @@ Page({
       lvCount: on ? ('共 ' + ev.length + ' 次（全部 ' + all.length + ' 次）') : ('共 ' + all.length + ' 次'),
       lvList: ev.map(function (e) {
         return {
-          leaveDate: Store.ymdWd(e.leaveDate), hours: Store.fmtH(e.hours),
+          iso: e.leaveDate,                       // 真实 ISO 日期（供撤销/编辑使用）
+          leaveDate: Store.ymdWd(e.leaveDate),    // 展示用文本
+          hours: Store.fmtH(e.hours),
           sources: e.sources.slice().sort(function (a, b) { return a.recDate < b.recDate ? 1 : -1; })
             .map(function (s) { return Store.ymdWd(s.recDate) + ' ' + Store.fmtH(s.hours) + 'h'; }).join('、')
         };
@@ -407,7 +418,9 @@ Page({
     upd['dd.hourSel'] = nv.split(':')[0];
     upd['dd.minuteSel'] = nv.split(':')[1];
     this.setData(upd);
-    if (k === 'm') { this.recalcAdd(); this.closeDropdown(); }
+    this._timeTouched = true;          // 用户手动改过时间：后续切换日期不再覆盖
+    this.recalcAdd();                  // 起止时间 → 加班时长 实时联动（选时/选分都刷新）
+    if (k === 'm') this.closeDropdown();
   },
   closeDropdown: function () { this._ddTarget = null; this.setData({ 'dd.show': false, 'dd.openTarget': '' }); },
   /* 列表滚动时收起全局下拉面板，避免浮层随内容滚动错位 */
@@ -469,7 +482,7 @@ Page({
   onDpCellTap: function (e) {
     var iso = e.currentTarget.dataset.iso;
     var t = this._dpTarget;
-    if (t === 'fDate') this.setData({ 'add.dateIso': iso, 'add.dateText': isoToText(iso) });
+    if (t === 'fDate') this._setAddDate(iso);
     else if (t === 'lvDate') this.setData({ 'leave.dateIso': iso, 'leave.dateText': isoToText(iso) });
     else if (t === 'rngStart') { this.statRange.start = iso; this.setData({ statStartText: isoToText(iso) }); }
     else if (t === 'rngEnd') { this.statRange.end = iso; this.setData({ statEndText: isoToText(iso) }); }
@@ -492,7 +505,7 @@ Page({
     this._dpSelIso = iso;
     this.dpY = +iso.slice(0, 4); this.dpM = +iso.slice(5, 7);
     var t = this._dpTarget;
-    if (t === 'fDate') this.setData({ 'add.dateIso': iso, 'add.dateText': isoToText(iso) });
+    if (t === 'fDate') this._setAddDate(iso);
     else if (t === 'lvDate') this.setData({ 'leave.dateIso': iso, 'leave.dateText': isoToText(iso) });
     else if (t === 'rngStart') { this.statRange.start = iso; this.setData({ statStartText: isoToText(iso) }); }
     else if (t === 'rngEnd') { this.statRange.end = iso; this.setData({ statEndText: isoToText(iso) }); }
@@ -510,17 +523,59 @@ Page({
     this.setData(upd);
   },
   closeSheets: function () {
-    this.setData({ sheetShow: false, 'add.show': false, 'leave.show': false, 'imp.show': false, 'exp.show': false });
+    this._dragSheet = null; this._dragY = 0; this._dragMoved = false;
+    this.setData({
+      sheetShow: false, 'sheetDrag.name': '', 'sheetDrag.style': '',
+      'add.show': false, 'leave.show': false, 'imp.show': false, 'exp.show': false
+    });
   },
   closeAllSwipes: function () { this.setData({ closeToken: this.data.closeToken + 1, swipeOpenKey: '', scrollLock: false }); },
 
+  /* ---------- 弹层顶部把手：下拉缩回并关闭 ----------
+     拖动热区（.grab-area）跟手位移，松手后按阈值决定「回弹」或「关闭」；
+     位移只允许向下（dy >= 0），避免把手被拖出屏幕顶部。 */
+  onSheetDragStart: function (e) {
+    this._dragSheet = e.currentTarget.dataset.sheet;
+    this._dragStartY = (e.touches && e.touches[0]) ? e.touches[0].clientY : 0;
+    this._dragY = 0; this._dragMoved = false;
+    this.setData({ 'sheetDrag.name': this._dragSheet, 'sheetDrag.style': '' });
+  },
+  onSheetDragMove: function (e) {
+    if (!this._dragSheet) return;
+    var y = (e.touches && e.touches[0]) ? e.touches[0].clientY : 0;
+    var dy = y - this._dragStartY;
+    if (dy < 0) dy = 0;
+    if (dy > 4) this._dragMoved = true;
+    this._dragY = dy;
+    this.setData({ 'sheetDrag.style': 'transform:translateY(' + dy + 'px);transition:none;' });
+  },
+  onSheetDragEnd: function () {
+    var name = this._dragSheet;
+    if (!name) return;
+    var dy = this._dragY || 0, moved = this._dragMoved;
+    this._dragSheet = null; this._dragY = 0; this._dragMoved = false;
+    var that = this;
+    if (moved && dy > 96) {                       // 拖过阈值：顺势滑出并关闭
+      this.setData({ 'sheetDrag.style': 'transform:translateY(100%);transition:transform .2s cubic-bezier(.2,.8,.2,1);' });
+      setTimeout(function () {
+        that.closeSheets();
+      }, 170);
+      return;
+    }
+    // 未达阈值：回弹归位后交还 class 控制（避免内联样式长期挂住 transition）
+    this.setData({ 'sheetDrag.style': 'transform:translateY(0);transition:transform .2s cubic-bezier(.2,.8,.2,1);' });
+    setTimeout(function () { that.setData({ 'sheetDrag.name': '', 'sheetDrag.style': '' }); }, 210);
+  },
+
   /* ============ 添加 / 修改加班 ============ */
   openAddSheet: function () {
-    this._editingId = null; this._validTouched = false;
+    this._editingId = null; this._validTouched = false; this._timeTouched = false;
     var add = this.data.add;
+    var iso = Store.todayStr();
+    var df = Store.defTimes(iso);          // 默认时段随「今天」是工作日/周末而定
     add.editingId = null; add.validTouched = false;
-    add.dateIso = Store.todayStr(); add.dateText = isoToText(Store.todayStr());
-    add.start = '18:30'; add.end = '21:30'; add.startText = '18:30'; add.endText = '21:30';
+    add.dateIso = iso; add.dateText = isoToText(iso);
+    add.start = df.start; add.end = df.end; add.startText = df.start; add.endText = df.end;
     add.reason = ''; add.type = 'comp'; add.title = '添加加班记录';
     add.validText = '';               // 新增态留空：默认值仅以 placeholder 隐含显示
     add.validSelStart = 0; add.validSelEnd = 0;
@@ -534,6 +589,7 @@ Page({
     var r = Store.records.filter(function (x) { return x.id === id; })[0];
     if (!r) return;
     this._editingId = id; this._validTouched = true;
+    this._timeTouched = true;              // 修改态：时间来自记录本身，不随日期自动改写
     var add = this.data.add;
     add.editingId = id; add.validTouched = true;
     add.dateIso = r.date; add.dateText = isoToText(r.date);
@@ -547,6 +603,16 @@ Page({
     this.setData({ add: add });
     this.recalcAdd();
     this.openSheet('add');
+  },
+  /* 变更加班日期：日期 → 默认起止时段 → 加班时长 全链联动。
+     未手动改过时间时套用该日期（工作日/周末）的默认时段；改过则保留用户输入。 */
+  _setAddDate: function (iso) {
+    this.setData({ 'add.dateIso': iso, 'add.dateText': isoToText(iso) });
+    if (!this._timeTouched) {
+      var df = Store.defTimes(iso);
+      this.setData({ 'add.start': df.start, 'add.end': df.end, 'add.startText': df.start, 'add.endText': df.end });
+    }
+    this.recalcAdd();
   },
   onReasonInput: function (e) { this.setData({ 'add.reason': e.detail.value }); },
   onTypeTap: function (e) { this.setData({ 'add.type': e.currentTarget.dataset.v }); },
@@ -608,7 +674,10 @@ Page({
     this.closeSheets();
     this.renderAll();
   },
-  onRecEdit: function (e) { this.openEditRecord(e.detail.recId); },
+  onRecEdit: function (e) {
+    this.closeAllSwipes();   // 打开编辑 dialog 的同一刻复位该行左滑展开态，避免保存后仍处于左滑
+    this.openEditRecord(e.detail.recId);
+  },
   onRecDelete: function (e) { this.deleteRecord(e.detail.recId); },
   deleteRecord: function (id) {
     var res = Store.deleteRecord(id);
@@ -748,9 +817,16 @@ Page({
     this.closeSheets();
     this.renderAll();
   },
-  onLvEdit: function (e) { this.openEditLeave(e.detail.leaveDate); },
+  /* 注意：swipe-item 的 leaveDate 属性承载的是「显示文本」（如 2026-10-05 · 周一），
+     不能直接拿去比对存储里的 ISO 日期；真实日期走 detail.iso（组件透传）。
+     之前直接传显示文本，导致撤销/编辑的比对永远不命中 —— 表现为「点撤销没反应」。 */
+  onLvEdit: function (e) {
+    this.closeAllSwipes();   // 打开编辑 dialog 的同一刻复位该行左滑展开态，避免保存后仍处于左滑
+    this.openEditLeave(e.detail.iso || e.detail.leaveDate);
+  },
   onLvUndo: function (e) {
-    var res = Store.undoLeave(e.detail.leaveDate);
+    var iso = e.detail.iso || e.detail.leaveDate;
+    var res = Store.undoLeave(iso);
     this.toast(res.toast);
     this.renderAll();
   },

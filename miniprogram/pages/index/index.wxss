@@ -436,7 +436,10 @@ button::after { border: none; }
   max-height: 92%; display: flex; flex-direction: column;
 }
 .sheet.show { transform: translateY(0); }
-.sheet .grab { width: 38px; height: 4px; border-radius: 3px; background: #dcdee5; margin: 2px auto 14px; flex: none; }
+/* 顶部把手：视觉横线保持纤细，但用 .grab-area 撑出足够大的触摸热区（便于下拉关闭）。
+   .grab-area 用负 margin 抵消 .sheet 的内边距，铺满面板顶部整条。 */
+.sheet .grab-area { flex: none; margin: -12px -18px 0; padding: 12px 0 14px; display: flex; justify-content: center; }
+.sheet .grab { width: 38px; height: 4px; border-radius: 3px; background: #dcdee5; margin: 0; }
 .sheet h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; }
 .sheet .sub { font-size: 12.5px; color: var(--text-2); margin-bottom: 16px; flex: none; line-height: 1.5; }
 .sheet .body { overflow-y: auto; flex: 1; min-height: 0; }

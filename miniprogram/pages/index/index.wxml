@@ -157,7 +157,7 @@
         </view>
       </view>
 
-      <view class="app-version">拾时簿  GleanTime  v1.1.0</view>
+      <view class="app-version">拾时簿  GleanTime  v1.1.1</view>
     </view>
   </scroll-view>
 
@@ -192,7 +192,7 @@
       <view wx:if="{{!leavesExist}}" class="empty"><view>暂无调休使用记录</view><view>点击右下角「＋」记录调休使用</view></view>
       <block wx:else>
         <view wx:if="{{!lvList.length}}" class="empty"><view>该年月暂无调休记录</view><view>试试切换其他年份或月份</view></view>
-        <swipe-item wx:for="{{lvList}}" wx:for-item="lv" wx:key="leaveDate" leaveDate="{{lv.leaveDate}}" delLabel="撤销" closeToken="{{closeToken}}" openKey="{{swipeOpenKey}}" bind:edit="onLvEdit" bind:delete="onLvUndo" bind:lock="onSwipeLock" bind:open="onSwipeOpen" bind:close="onSwipeClose">
+        <swipe-item wx:for="{{lvList}}" wx:for-item="lv" wx:key="leaveDate" leaveDate="{{lv.leaveDate}}" iso="{{lv.iso}}" delLabel="撤销" closeToken="{{closeToken}}" openKey="{{swipeOpenKey}}" bind:edit="onLvEdit" bind:delete="onLvUndo" bind:lock="onSwipeLock" bind:open="onSwipeOpen" bind:close="onSwipeClose">
           <view class="leave">
             <view class="badge"></view>
             <view class="info">
@@ -231,8 +231,9 @@
   <view class="scrim {{sheetShow?'show':''}}" bindtap="closeSheets"></view>
 
   <!-- ============ Sheet 1: 添加 / 修改加班 ============ -->
-  <view class="sheet {{add.show?'show':''}}">
-    <view class="grab"></view>
+  <!-- 顶部把手（.grab-area）可向下拖动：跟手缩回，松手过阈值即关闭该弹层 -->
+  <view class="sheet {{add.show?'show':''}}" style="{{sheetDrag.name==='add'?sheetDrag.style:''}}">
+    <view class="grab-area" data-sheet="add" bindtouchstart="onSheetDragStart" catchtouchmove="onSheetDragMove" bindtouchend="onSheetDragEnd" bindtouchcancel="onSheetDragEnd"><view class="grab"></view></view>
     <h2>{{add.title}}</h2>
     <view class="sub">{{add.sub}}</view>
     <view class="body">
@@ -294,8 +295,8 @@
   </view>
 
   <!-- ============ Sheet 2: 使用 / 修改调休 ============ -->
-  <view class="sheet {{leave.show?'show':''}}">
-    <view class="grab"></view>
+  <view class="sheet {{leave.show?'show':''}}" style="{{sheetDrag.name==='leave'?sheetDrag.style:''}}">
+    <view class="grab-area" data-sheet="leave" bindtouchstart="onSheetDragStart" catchtouchmove="onSheetDragMove" bindtouchend="onSheetDragEnd" bindtouchcancel="onSheetDragEnd"><view class="grab"></view></view>
     <h2>{{leave.title}}</h2>
     <view class="sub">{{leave.sub}}</view>
     <view class="body fixed">
@@ -335,8 +336,8 @@
   </view>
 
   <!-- ============ Sheet 3: 数据导入 ============ -->
-  <view class="sheet {{imp.show?'show':''}}">
-    <view class="grab"></view>
+  <view class="sheet {{imp.show?'show':''}}" style="{{sheetDrag.name==='imp'?sheetDrag.style:''}}">
+    <view class="grab-area" data-sheet="imp" bindtouchstart="onSheetDragStart" catchtouchmove="onSheetDragMove" bindtouchend="onSheetDragEnd" bindtouchcancel="onSheetDragEnd"><view class="grab"></view></view>
     <h2>{{imp.title}}</h2>
     <view class="sub">{{imp.sub}}</view>
     <view class="body">
@@ -367,8 +368,8 @@
   </view>
 
   <!-- ============ Sheet 4: 数据导出 ============ -->
-  <view class="sheet {{exp.show?'show':''}}">
-    <view class="grab"></view>
+  <view class="sheet {{exp.show?'show':''}}" style="{{sheetDrag.name==='exp'?sheetDrag.style:''}}">
+    <view class="grab-area" data-sheet="exp" bindtouchstart="onSheetDragStart" catchtouchmove="onSheetDragMove" bindtouchend="onSheetDragEnd" bindtouchcancel="onSheetDragEnd"><view class="grab"></view></view>
     <h2>{{exp.title}}</h2>
     <view class="sub">{{exp.sub}}</view>
     <view class="body">

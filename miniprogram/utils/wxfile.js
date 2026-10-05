@@ -45,6 +45,12 @@ function localStamp() {
   var d = new Date();
   return localDate() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
 }
+/* 14 位紧凑时间戳 YYYYMMDDHHMMSS（用于导出文件名） */
+function localDateTime14() {
+  var d = new Date();
+  return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate())
+    + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+}
 function toast(msg, dur) { wx.showToast({ title: msg, icon: 'none', duration: dur || 2000 }); }
 
 /* 运行平台：用于区分「电脑端 / 移动端」的能力差异 */
@@ -79,7 +85,7 @@ function ensurePrivacy(next) {
 
 /* ---------------- 导出内容 ---------------- */
 function exportJson() { return JSON.stringify(Store.buildPayload(), null, 2); }
-function exportFileName() { return 'overtime_records_' + localDate() + '.json'; }
+function exportFileName() { return 'glean_time_data_backup_' + localDateTime14() + '.json'; }
 function exportMeta() { return Store.records.length + ' 条加班记录 · 生成于 ' + localStamp(); }
 
 /* ---------------- 导入：解析备份文本 ----------------

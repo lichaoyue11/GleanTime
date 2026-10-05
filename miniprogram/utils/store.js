@@ -70,6 +70,22 @@ function md(d) { var p = ymd(d).split('-'); return p[1] + '月' + p[2] + '日'; 
 function wd(d) { return WEEK[new Date(ymd(d) + 'T00:00:00').getDay()]; }
 function ymdWd(d) { return ymd(d) + ' · ' + wd(d); }
 
+// 「添加加班」弹层的默认起止时段 —— 由加班日期落在星期几决定：
+//   周一~周五（工作日）→ 18:30 - 21:00
+//   周六 / 周日（休息日）→ 09:00 - 18:00
+// 说明：这里只按「星期」粗分工作日/休息日，不涉及法定节假日与调休补班
+//（小程序无内置节假日判定能力，且国务院年度安排需外部数据支撑）。
+function defTimes(dateIso) {
+  var iso = ymd(dateIso || todayStr());
+  var w = new Date(iso + 'T00:00:00').getDay();   // 0 = 周日 … 6 = 周六
+  if (w === 0 || w === 6) return { start: '09:00', end: '18:00' };
+  return { start: '18:30', end: '21:00' };
+}
+function isRestDay(dateIso) {
+  var w = new Date(ymd(dateIso || todayStr()) + 'T00:00:00').getDay();
+  return w === 0 || w === 6;
+}
+
 function validUntilOf(d) {
   var s = ymd(d), p = s.split('-'), y = +p[0], m = +p[1];
   if (s < VALID_CUTOFF) return (y + 1) + '-03-31';
@@ -266,7 +282,7 @@ var Store = {
   STORE_KEY: STORE_KEY,
   SCHEMA_VERSION: SCHEMA_VERSION,
   APP_NAME: '拾时簿 GleanTime',
-  APP_VERSION: 'v1.1.0',
+  APP_VERSION: 'v1.1.1',
   VALID_CUTOFF: VALID_CUTOFF,
   records: [],
 
@@ -290,6 +306,8 @@ var Store = {
   md: md,
   wd: wd,
   ymdWd: ymdWd,
+  defTimes: defTimes,
+  isRestDay: isRestDay,
   validUntilOf: validUntilOf,
   isExpired: isExpired,
   todayStr: todayStr,
