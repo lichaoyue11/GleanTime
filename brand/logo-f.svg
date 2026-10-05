@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>拾时簿 GleanTime · 头像方案 F（「拾」字标）</title>
+  <defs>
+    <linearGradient id="gbF" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5B96F8"/>
+      <stop offset="1" stop-color="#2F63CF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#gbF)"/>
+  <text x="256" y="346" text-anchor="middle"
+        font-family="'Microsoft YaHei','PingFang SC',sans-serif"
+        font-size="320" font-weight="700" fill="#FFFFFF"
+        letter-spacing="0">拾</text>
+  <circle cx="388" cy="156" r="26" fill="#27BD86"/>
+</svg>

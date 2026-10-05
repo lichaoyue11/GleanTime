@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>拾时簿 GleanTime · 小程序头像方案</title>
+<style>
+  :root {
+    --primary: #4c8bf5; --primary-strong: #3a73e0; --primary-deep: #2f63cf;
+    --primary-soft: #eaf1ff; --green: #27bd86; --amber: #f5a623;
+    --text: #1e2430; --text-2: #8a909c; --text-3: #b6bcc6;
+    --card: #ffffff; --divider: #eef1f5; --page: #f2f4f8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 28px 56px; background: var(--page); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; font-weight: 700; letter-spacing: .2px; }
+  h2 { font-size: 16px; margin: 34px 0 14px; font-weight: 600; }
+  h2::before { content: ""; display: inline-block; width: 4px; height: 15px; border-radius: 2px;
+    background: var(--primary); vertical-align: -2px; margin-right: 8px; }
+  .sub { color: var(--text-2); margin: 0; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .card { background: var(--card); border-radius: 14px; box-shadow: 0 2px 10px rgba(30,36,48,.05); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px;
+    background: var(--primary-soft); color: var(--primary-deep); margin-left: 8px; vertical-align: 2px; }
+  .pill.green { background: #e6f8f1; color: #17926a; }
+
+  /* 顶部 hero */
+  .hero { display: flex; gap: 22px; align-items: center; padding: 22px; margin-top: 18px; }
+  .hero .big { width: 144px; height: 144px; border-radius: 26px; flex: 0 0 144px; box-shadow: 0 6px 18px rgba(47,99,207,.22); }
+  .hero .circ { width: 144px; height: 144px; border-radius: 50%; flex: 0 0 144px; overflow: hidden;
+    box-shadow: 0 6px 18px rgba(47,99,207,.22); }
+  .hero .circ img { width: 144px; height: 144px; display: block; }
+  .hero-txt h3 { margin: 0 0 6px; font-size: 17px; }
+  .hero-txt p { margin: 0 0 8px; color: var(--text-2); }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 2px 10px; font-size: 13px; }
+  .kv b { color: var(--text-2); font-weight: 400; }
+
+  /* 三方案 */
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .opt { padding: 18px; }
+  .opt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .opt-head .name { font-weight: 600; font-size: 15px; }
+  .opt-head .tag { font-size: 12px; color: var(--text-3); }
+  .shots { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 14px; }
+  .shot { text-align: center; }
+  .shot .lbl { font-size: 11px; color: var(--text-3); margin-top: 5px; }
+  .sq144 { width: 96px; height: 96px; border-radius: 19px; display: block; }
+  .ci144 { width: 96px; height: 96px; border-radius: 50%; display: block; box-shadow: 0 3px 10px rgba(47,99,207,.18); }
+  .small-row { display: flex; gap: 10px; align-items: center; padding-top: 12px; border-top: 1px dashed var(--divider); }
+  .small-row .s { border-radius: 8px; display: block; }
+  .small-row .sc { border-radius: 50%; display: block; }
+  ul.dots { margin: 12px 0 0; padding-left: 0; list-style: none; font-size: 13px; color: var(--text); }
+  ul.dots li { position: relative; padding-left: 14px; margin-bottom: 5px; color: #46505f; }
+  ul.dots li::before { content: ""; position: absolute; left: 3px; top: 9px; width: 4px; height: 4px;
+    border-radius: 50%; background: var(--primary); }
+
+  /* 色板 */
+  .tokens { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .tk { padding: 12px; border-radius: 12px; }
+  .tk .chip { height: 40px; border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,.05); }
+  .tk .nm { font-size: 13px; font-weight: 600; }
+  .tk .hx { font-size: 12px; color: var(--text-2); font-family: ui-monospace, Consolas, monospace; }
+  .tk .us { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--divider); }
+  th { color: var(--text-2); font-weight: 500; background: #fafbfd; }
+  td code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--primary-deep); }
+  .ok { color: #17926a; font-weight: 600; }
+
+  .copybox { padding: 16px; margin-bottom: 12px; }
+  .copybox .t { font-size: 13px; color: var(--text-2); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .copybox .txt { font-size: 14px; color: var(--text); line-height: 1.75; }
+  .num { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--text-3); }
+  .note { font-size: 12.5px; color: var(--text-2); background: #fff8ec; border-left: 3px solid var(--amber);
+    padding: 10px 12px; border-radius: 0 8px 8px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>拾时簿 GleanTime · 小程序头像方案</h1>
+  <p class="sub">微信平台规格：建议 144×144 · PNG · ≤2MB · 需同时适配方形与圆形裁切 · 三套方案均为矢量稿导出，可无损放大</p>
+
+  <!-- ============ 主推 ============ -->
+  <h2>主推方案 A：白色表盘 + 绿色对勾（已做圆形/小尺寸校验）</h2>
+  <div class="card hero">
+    <img class="big" src="logo-a-144.png" alt="方案A方形">
+    <img class="circ" src="logo-a-144.png" alt="方案A圆形">
+    <div class="hero-txt">
+      <h3>「时间已被记录」<span class="pill">主推</span><span class="pill green">圆形裁切安全</span></h3>
+      <p>用最少的两个元素讲清产品：一个表盘 = 时间，一个对勾 = 记好了。</p>
+      <div class="kv">
+        <b>视觉风格</b><span>扁平几何、实底色、无描边无渐变纹理，工具型克制感</span>
+        <b>构图元素</b><span>白色圆环表盘（r=38，环宽 10）+ 环内绿色对勾（线宽 12，圆角端点）</span>
+        <b>配色</b><span>底：#5B96F8→#2F63CF 竖向蓝渐变；表盘：#FFFFFF；对勾：#27BD86</span>
+        <b>校验结果</b><span>墨迹 0% 越出 80% 安全圆；绿勾与白环净空 5.8px（@144），不粘连</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 三方案对照 ============ -->
+  <h2>三套方案对照（含方形 / 圆形 / 小尺寸实拍）</h2>
+  <div class="grid3">
+
+    <div class="card opt">
+      <div class="opt-head"><span class="name">A · 表盘 + 对勾</span><span class="tag">主推</span></div>
+      <div class="shots">
+        <div class="shot"><img class="sq144" src="logo-a-144.png"><div class="lbl">方形 96px</div></div>
+        <div class="shot"><img class="ci144" src="logo-a-144.png"><div class="lbl">圆形裁切</div></div>
+      </div>
+      <div class="small-row">
+        <img class="s" src="logo-a-144.png" width="64" height="64">
+        <img class="sc" src="logo-a-144.png" width="40" height="40">
+        <img class="sc" src="logo-a-144.png" width="24" height="24">
+        <span class="lbl" style="font-size:11px;color:var(--text-3)">64 / 40 / 24px</span>
+      </div>
+      <ul class="dots">
+        <li>寓意：加班时长已被如实记录，安心</li>
+        <li>优势：元素最少、对比最强，24px 下仍可辨（墨迹占比 13.4%）</li>
+        <li>适配：最贴合“记录 + 完成”的产品气质</li>
+      </ul>
+    </div>
+
+    <div class="card opt">
+      <div class="opt-head"><span class="name">B · 「时」字标</span><span class="tag">最直白</span></div>
+      <div class="shots">
+        <div class="shot"><img class="sq144" src="logo-b-144.png"><div class="lbl">方形 96px</div></div>
+        <div class="shot"><img class="ci144" src="logo-b-144.png"><div class="lbl">圆形裁切</div></div>
+      </div>
+      <div class="small-row">
+        <img class="s" src="logo-b-144.png" width="64" height="64">
+        <img class="sc" src="logo-b-144.png" width="40" height="40">
+        <img class="sc" src="logo-b-144.png" width="24" height="24">
+        <span class="lbl" style="font-size:11px;color:var(--text-3)">64 / 40 / 24px</span>
+      </div>
+      <ul class="dots">
+        <li>寓意：直取品牌名「拾时簿」的“时”，一眼知道和时间有关</li>
+        <li>优势：浅蓝底 #EAF1FF，在微信列表中更轻、更不压迫</li>
+        <li>元素：深蓝「时」字（80px 粗体）+ 右上绿色圆点（记录点）</li>
+      </ul>
+    </div>
+
+    <div class="card opt">
+      <div class="opt-head"><span class="name">C · 账页 + 账目线</span><span class="tag">最贴合“簿”</span></div>
+      <div class="shots">
+        <div class="shot"><img class="sq144" src="logo-c-144.png"><div class="lbl">方形 96px</div></div>
+        <div class="shot"><img class="ci144" src="logo-c-144.png"><div class="lbl">圆形裁切</div></div>
+      </div>
+      <div class="small-row">
+        <img class="s" src="logo-c-144.png" width="64" height="64">
+        <img class="sc" src="logo-c-144.png" width="40" height="40">
+        <img class="sc" src="logo-c-144.png" width="24" height="24">
+        <span class="lbl" style="font-size:11px;color:var(--text-3)">64 / 40 / 24px</span>
+      </div>
+      <ul class="dots">
+        <li>寓意：一页账簿，第一条已记录（绿色）</li>
+        <li>优势：图形最饱满，远看识别度最高（墨迹占比 25.9%）</li>
+        <li>元素：白色圆角账页 + 绿/浅蓝三条账目横线</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <h2>配色令牌（与小程序内 UI 完全同源）</h2>
+  <div class="card" style="padding:18px">
+    <div class="tokens">
+      <div class="tk"><div class="chip" style="background:#4C8BF5"></div><div class="nm">品牌主蓝</div><div class="hx">#4C8BF5</div><div class="us">界面主色 / 按钮</div></div>
+      <div class="tk"><div class="chip" style="background:#2F63CF"></div><div class="nm">深蓝</div><div class="hx">#2F63CF</div><div class="us">头像底色终点 / 字标</div></div>
+      <div class="tk"><div class="chip" style="background:#5B96F8"></div><div class="nm">亮蓝</div><div class="hx">#5B96F8</div><div class="us">头像底色起点</div></div>
+      <div class="tk"><div class="chip" style="background:#EAF1FF"></div><div class="nm">浅蓝底</div><div class="hx">#EAF1FF</div><div class="us">方案 B 背景 / 次级按钮</div></div>
+      <div class="tk"><div class="chip" style="background:#27BD86"></div><div class="nm">记录绿</div><div class="hx">#27BD86</div><div class="us">强调 / 对勾 / 有效时长</div></div>
+      <div class="tk"><div class="chip" style="background:#1E2430"></div><div class="nm">正文墨</div><div class="hx">#1E2430</div><div class="us">正文文字</div></div>
+    </div>
+    <p class="note" style="margin-top:14px">头像只使用其中的<b>蓝 + 白 + 绿</b>三色，与界面内的主色/强调色一一对应，保证“看到头像就认出这个 App”的一致性。</p>
+  </div>
+
+  <h2>微信平台规格对照</h2>
+  <div class="card" style="padding:6px 0; overflow:hidden">
+    <table>
+      <tr><th>平台要求</th><th>本方案</th><th>状态</th></tr>
+      <tr><td>格式 png/bmp/jpeg/jpg/gif</td><td>导出 <code>PNG</code>（无损，文字与线条更锐利）</td><td class="ok">符合</td></tr>
+      <tr><td>文件 ≤ 2MB</td><td>144px 稿约 8–20KB</td><td class="ok">符合</td></tr>
+      <tr><td>建议尺寸 144×144</td><td>同时提供 <code>144×144</code> 与 <code>512×512</code> 两版</td><td class="ok">符合</td></tr>
+      <tr><td>不得含政治敏感、色情内容</td><td>纯几何图形 + 单字，无任何敏感元素</td><td class="ok">符合</td></tr>
+      <tr><td>需适配圆形裁切</td><td>全部图形位于内切圆 80% 安全区内（实测越界 0%）</td><td class="ok">符合</td></tr>
+      <tr><td>小尺寸可识别</td><td>24px 下墨迹占比 13%–26%，可辨</td><td class="ok">符合</td></tr>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

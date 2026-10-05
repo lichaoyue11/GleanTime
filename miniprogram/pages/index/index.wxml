@@ -1,0 +1,466 @@
+<view class="app">
+
+  <!-- ===== 顶部品牌头：填充状态栏 / 挖孔区域 =====
+       style 内联 padding-top 让出状态栏+挖孔；.hero-inner 内联 padding-right 避开右上角微信胶囊 -->
+  <view class="hero" style="{{appStyle}}">
+    <view class="hero-glow"></view>
+    <view class="hero-inner" style="{{heroInnerStyle}}">
+      <view class="hero-left">
+        <view class="hero-title">拾时簿 <text class="brand">GleanTime</text></view>
+        <view class="hero-sub">把每一小时的付出记在簿上</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ============ 加班记录页 ============ -->
+  <scroll-view wx:if="{{tab==='records'}}" class="pages" scroll-y="{{!scrollLock}}" scroll-with-animation bindscroll="onPageScroll">
+    <view class="page">
+      <view class="summary-row">
+        <view class="sumcard"><view class="v">{{recSummary.total}}<small> h</small></view><view class="k">累计加班</view></view>
+        <view class="sumcard alt"><view class="v">{{recSummary.comp}}<small> h</small></view><view class="k">可调休加班</view></view>
+        <view class="sumcard amber"><view class="v">{{recSummary.days}}<small> 天</small></view><view class="k">折算调休</view></view>
+      </view>
+      <view class="sum-note" hidden="{{!recNoteShow}}">{{recNote}}</view>
+
+      <view class="filter-bar">
+        <view class="dd fyear {{recFilter.yOn ? 'on' : ''}} {{dd.show && dd.openTarget==='fy' ? 'open' : ''}}">
+          <view class="dd-trigger" id="ddTrig-fy" bindtap="onDdTrigger" data-dd="fy">
+            <text class="dd-val">{{recFilter.yVal}}</text>
+            <view class="ic dd-ico"></view>
+          </view>
+        </view>
+        <view class="dd {{recFilter.mOn ? 'on' : ''}} {{dd.show && dd.openTarget==='fm' ? 'open' : ''}}">
+          <view class="dd-trigger" id="ddTrig-fm" bindtap="onDdTrigger" data-dd="fm">
+            <text class="dd-val">{{recFilter.mVal}}</text>
+            <view class="ic dd-ico"></view>
+          </view>
+        </view>
+        <view class="freset" id="freset" hidden="{{!recFilter.resetShow}}" bindtap="onRecFilterReset">
+          <view class="ic ic-reset"></view>
+        </view>
+      </view>
+
+      <view class="sec-title">加班明细 <text class="count">{{recCount}}</text></view>
+      <view wx:if="{{!recordsExist}}" class="empty"><view>暂无加班记录</view><view>点击右下角「＋」添加加班</view></view>
+      <block wx:else>
+        <view wx:if="{{!recList.length}}" class="empty"><view>该年月暂无加班记录</view><view>试试切换其他年份或月份</view></view>
+        <swipe-item wx:for="{{recList}}" wx:for-item="rec" wx:key="id" recId="{{rec.id}}" delLabel="删除" closeToken="{{closeToken}}" openKey="{{swipeOpenKey}}" bind:edit="onRecEdit" bind:delete="onRecDelete" bind:lock="onSwipeLock" bind:open="onSwipeOpen" bind:close="onSwipeClose">
+          <view class="rec">
+            <view class="rec-main">
+              <view class="top">
+                <view class="date">{{rec.date}}</view>
+                <view class="dur">{{rec.dur}} h</view>
+              </view>
+              <view class="mid">
+                <view class="ic ic-clock-sm"></view>
+                <text class="tm">{{rec.range}}</text>
+                <text class="eff">有效 <text class="b">{{rec.valid}}h</text></text>
+              </view>
+              <view class="reason">{{rec.reason}}</view>
+              <view class="tags">
+                <text wx:for="{{rec.tags}}" wx:for-item="t" wx:key="cls" class="tag {{t.cls}}">{{t.text}}</text>
+              </view>
+              <view class="deduct-box" wx:if="{{rec.deductHas}}">
+                <view class="dh"><text>调休抵扣标注</text><text class="rem">剩余 {{rec.deductRem}}h</text></view>
+                <view wx:for="{{rec.deduct}}" wx:for-item="d" wx:key="text" class="deduct-line">
+                  <text>{{d.text}}</text><text class="amt">{{d.amt}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </swipe-item>
+      </block>
+    </view>
+  </scroll-view>
+
+  <!-- ============ 时长统计页 ============ -->
+  <scroll-view wx:if="{{tab==='stats'}}" class="pages" scroll-y="{{!scrollLock}}" scroll-with-animation bindscroll="onPageScroll">
+    <view class="page">
+      <view class="rng-bar">
+        <view class="rng-seg">
+          <view class="rng-opt {{statRange.mode==='all'?'on':''}}" bindtap="onRangeTap" data-rng="all">全部</view>
+          <view class="rng-opt {{statRange.mode==='last'?'on':''}}" bindtap="onRangeTap" data-rng="last">去年</view>
+          <view class="rng-opt {{statRange.mode==='year'?'on':''}}" bindtap="onRangeTap" data-rng="year">今年</view>
+          <view class="rng-opt {{statRange.mode==='time'?'on':''}}" bindtap="onRangeTap" data-rng="time">
+            <view class="ic ic-cal"></view>时间
+          </view>
+        </view>
+        <view class="rng-custom {{statRange.mode==='time'?'show':''}}">
+          <view class="rng-date di-box date-input {{statStartText?'':'di-ph'}}" bindtap="openDatePicker" data-target="rngStart">{{statStartText || '开始日期'}}</view>
+          <text class="rng-sep">至</text>
+          <view class="rng-date di-box date-input {{statEndText?'':'di-ph'}}" bindtap="openDatePicker" data-target="rngEnd">{{statEndText || '结束日期'}}</view>
+          <view class="rng-clear" bindtap="onRangeClear">清除</view>
+        </view>
+        <view class="rng-note" hidden="{{!statNoteShow}}">{{statNote}}</view>
+      </view>
+
+      <view class="stat-card">
+        <view class="card-hd">调休额度构成</view>
+        <view class="donut-wrap">
+          <view class="donut" style="background:{{stat.donutBg}}">
+            <view class="center">
+              <view class="big">{{stat.donutBig}}</view>
+              <view class="lbl">可用天数</view>
+            </view>
+          </view>
+          <view class="legend">
+            <view class="item"><view class="dot" style="background:var(--green)"></view><text class="lk">可用调休</text><text class="lv">{{stat.lgAv}}</text></view>
+            <view class="item"><view class="dot" style="background:var(--primary)"></view><text class="lk">已使用</text><text class="lv">{{stat.lgUs}}</text></view>
+            <view class="item"><view class="dot" style="background:var(--red)"></view><text class="lk">已过期</text><text class="lv">{{stat.lgEx}}</text></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="stat-card">
+        <view class="card-hd">时长概览</view>
+        <view class="bigstat">
+          <view class="b"><view class="v">{{stat.total}}<small> h</small></view><view class="k">累计加班时长</view></view>
+          <view class="b g"><view class="v">{{stat.comp}}<small> h</small></view><view class="k">可调休加班时长</view></view>
+        </view>
+        <view style="height:12px"></view>
+        <view class="bigstat">
+          <view class="b n"><view class="v">{{stat.pr}}<small> h</small></view><view class="k">攻关加班时长</view></view>
+          <view class="b a"><view class="v">{{stat.holiday}}<small> h</small></view><view class="k">法定节假日加班时长</view></view>
+        </view>
+        <view style="height:12px"></view>
+        <view class="bigstat">
+          <view class="b g"><view class="v">{{stat.days}}<small> 天</small></view><view class="k">折算调休天数（可调休时长 ÷ 8）</view></view>
+        </view>
+      </view>
+
+      <view class="data-io">
+        <view class="btn outline io-btn" bindtap="openImportSheet">
+          <view class="ic ic-dl"></view>
+          数据导入
+        </view>
+        <view class="btn primary io-btn" bindtap="openExportSheet">
+          <view class="ic ic-up"></view>
+          数据导出
+        </view>
+      </view>
+
+      <view class="stat-card rule-card">
+        <view class="card-hd">调休有效期规则</view>
+        <view class="rule-item"><view class="rule-tag">2026 年 10 月之前</view>
+          <view class="rule-txt">此阶段的加班时长，有效期统一至<text class="b">次年 3 月 31 日</text>（按加班所在自然年顺延）。<text class="eg">例：2026-09-19 的加班 → 有效至 2027-03-31；2025-09-10 的加班 → 有效至 2026-03-31（已过期）</text></view>
+        </view>
+        <view class="rule-item"><view class="rule-tag alt">2026 年 10 月及之后</view>
+          <view class="rule-txt">此阶段的加班时长，有效期至<text class="b">下一自然季度末</text>：先定位加班所在自然季度，再顺延一个季度，取该季度最后一天（03-31 / 06-30 / 09-30 / 12-31）。<text class="eg">例：2026-10-15 属 Q4 → 有效至 2027-03-31；2027-01-10 属 Q1 → 有效至 2027-06-30；2027-04-01 属 Q2 → 有效至 2027-09-30</text></view>
+        </view>
+        <view class="rule-item"><view class="rule-tag plain">通用口径</view>
+          <view class="rule-txt">有效期<text class="b">含截止日当天</text>；截止日之后仍未抵扣的剩余时长计入「已过期」，不再参与调休抵扣。两档规则在 9/10 月交界处衔接连续。每笔可调休加班的截止日已在「加班记录」明细中逐条标注。<text class="eg">「已过期」仅统计「剩余未抵扣」的时长；已抵扣部分计入「已使用」，不受有效期影响。</text></view>
+        </view>
+        <view class="rule-foot">
+          <view class="rf-line">累计加班时长 = 所有记录「有效加班时长」之和</view>
+          <view class="rf-line">可调休加班时长 = 所有「可调休」记录有效加班时长之和</view>
+          <view class="rf-line">折算调休天数 = 可调休时长 ÷ 8</view>
+        </view>
+      </view>
+
+      <view class="app-version">拾时簿  GleanTime  v1.1.0</view>
+    </view>
+  </scroll-view>
+
+  <!-- ============ 调休记录页 ============ -->
+  <scroll-view wx:if="{{tab==='leaves'}}" class="pages" scroll-y="{{!scrollLock}}" scroll-with-animation bindscroll="onPageScroll">
+    <view class="page">
+      <view class="summary-row">
+        <view class="sumcard alt"><view class="v">{{lvSummary.av}}<small> h</small></view><view class="k">可用</view></view>
+        <view class="sumcard"><view class="v">{{lvSummary.us}}<small> h</small></view><view class="k">已使用</view></view>
+        <view class="sumcard red"><view class="v">{{lvSummary.ex}}<small> h</small></view><view class="k">已过期</view></view>
+      </view>
+
+      <view class="filter-bar">
+        <view class="dd fyear {{lvFilter.yOn ? 'on' : ''}} {{dd.show && dd.openTarget==='ly' ? 'open' : ''}}">
+          <view class="dd-trigger" id="ddTrig-ly" bindtap="onDdTrigger" data-dd="ly">
+            <text class="dd-val">{{lvFilter.yVal}}</text>
+            <view class="ic dd-ico"></view>
+          </view>
+        </view>
+        <view class="dd {{lvFilter.mOn ? 'on' : ''}} {{dd.show && dd.openTarget==='lm' ? 'open' : ''}}">
+          <view class="dd-trigger" id="ddTrig-lm" bindtap="onDdTrigger" data-dd="lm">
+            <text class="dd-val">{{lvFilter.mVal}}</text>
+            <view class="ic dd-ico"></view>
+          </view>
+        </view>
+        <view class="freset" id="lvReset" hidden="{{!lvFilter.resetShow}}" bindtap="onLvFilterReset">
+          <view class="ic ic-reset"></view>
+        </view>
+      </view>
+
+      <view class="sec-title">调休使用记录 <text class="count">{{lvCount}}</text></view>
+      <view wx:if="{{!leavesExist}}" class="empty"><view>暂无调休使用记录</view><view>点击右下角「＋」记录调休使用</view></view>
+      <block wx:else>
+        <view wx:if="{{!lvList.length}}" class="empty"><view>该年月暂无调休记录</view><view>试试切换其他年份或月份</view></view>
+        <swipe-item wx:for="{{lvList}}" wx:for-item="lv" wx:key="leaveDate" leaveDate="{{lv.leaveDate}}" delLabel="撤销" closeToken="{{closeToken}}" openKey="{{swipeOpenKey}}" bind:edit="onLvEdit" bind:delete="onLvUndo" bind:lock="onSwipeLock" bind:open="onSwipeOpen" bind:close="onSwipeClose">
+          <view class="leave">
+            <view class="badge"></view>
+            <view class="info">
+              <view class="d1">{{lv.leaveDate}}</view>
+              <view class="d2">抵扣来源：<text class="b">{{lv.sources}}</text></view>
+            </view>
+            <view class="h">{{lv.hours}}h</view>
+          </view>
+        </swipe-item>
+      </block>
+    </view>
+  </scroll-view>
+
+  <!-- ============ FAB ============ -->
+  <view class="fab {{tab==='stats'?'hide':''}}" bindtap="onFab">
+    <view class="ic ic-plus"></view>
+  </view>
+
+  <!-- ============ Bottom navigation ============ -->
+  <view class="bottomnav">
+    <view class="navitem {{tab==='records'?'active':''}}" bindtap="switchTab" data-tab="records">
+      <view class="ic ic-nav-rec"></view>
+      <text class="lbl">加班记录</text>
+    </view>
+    <view class="navitem {{tab==='leaves'?'active':''}}" bindtap="switchTab" data-tab="leaves">
+      <view class="ic ic-nav-leave"></view>
+      <text class="lbl">调休记录</text>
+    </view>
+    <view class="navitem {{tab==='stats'?'active':''}}" bindtap="switchTab" data-tab="stats">
+      <view class="ic ic-nav-stats"></view>
+      <text class="lbl">时长统计</text>
+    </view>
+  </view>
+
+  <!-- ============ Scrim ============ -->
+  <view class="scrim {{sheetShow?'show':''}}" bindtap="closeSheets"></view>
+
+  <!-- ============ Sheet 1: 添加 / 修改加班 ============ -->
+  <view class="sheet {{add.show?'show':''}}">
+    <view class="grab"></view>
+    <h2>{{add.title}}</h2>
+    <view class="sub">{{add.sub}}</view>
+    <view class="body">
+      <view class="field">
+        <label>加班日期</label>
+        <view class="di-box date-input {{add.dateText?'':'di-ph'}}" bindtap="openDatePicker" data-target="fDate">{{add.dateText || 'yyyy/mm/dd'}}</view>
+      </view>
+      <view class="row2">
+        <view class="field">
+          <label>起始时间</label>
+          <view class="dd {{dd.show && dd.openTarget==='start' ? 'open' : ''}}" id="ddTrig-start">
+            <view class="dd-trigger" bindtap="onDdTrigger" data-dd="start">
+              <view class="ic dd-lead"></view>
+              <text class="dd-val">{{add.startText}}</text>
+              <view class="ic dd-ico"></view>
+            </view>
+          </view>
+        </view>
+        <view class="field">
+          <label>结束时间</label>
+          <view class="dd {{dd.show && dd.openTarget==='end' ? 'open' : ''}}" id="ddTrig-end">
+            <view class="dd-trigger" bindtap="onDdTrigger" data-dd="end">
+              <view class="ic dd-lead"></view>
+              <text class="dd-val">{{add.endText}}</text>
+              <view class="ic dd-ico"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <view class="field">
+        <label>加班原因</label>
+        <textarea value="{{add.reason}}" bindinput="onReasonInput" placeholder="如：版本发布值守、客户需求支持..."></textarea>
+      </view>
+      <view class="field">
+        <label>加班类型</label>
+        <view class="seg">
+          <view class="{{add.type==='comp'?'on':''}}" bindtap="onTypeTap" data-v="comp">可调休</view>
+          <view class="{{add.type==='pr'?'on':''}}" bindtap="onTypeTap" data-v="pr">攻关</view>
+          <view class="{{add.type==='holiday'?'on':''}}" bindtap="onTypeTap" data-v="holiday">法定节假日</view>
+        </view>
+      </view>
+      <view class="calc">
+        <text class="ck">本次加班时长</text>
+        <view class="cvrow"><text class="cv">{{add.durText}}</text><text class="xd" hidden="{{!add.cross}}">跨天</text></view>
+      </view>
+      <view class="hint xday" hidden="{{!add.cross}}">{{add.crossHint}}</view>
+      <view class="calc eff">
+        <text class="ck">有效加班时长</text>
+        <!-- 默认值以 placeholder 形态隐含显示（灰），点击即可直接键入、无需先删掉预填值；
+             type 用 text（系统输入法），与「加班原因」保持一致 -->
+        <view class="cv-in"><input type="text" value="{{add.validText}}" placeholder="{{add.validPh}}" placeholder-class="cv-ph" selection-start="{{add.validSelStart}}" selection-end="{{add.validSelEnd}}" bindfocus="onValidFocus" bindinput="onValidInput" bindblur="onValidBlur"/><text class="u">小时</text></view>
+      </view>
+      <view class="hint">默认等于本次加班时长，可手动修改（如扣除用餐/休息）。累计加班按「有效加班时长」统计，「可调休」类型才计入调休额度。</view>
+    </view>
+    <view class="sheet-actions">
+      <view class="btn ghost" bindtap="closeSheets">取消</view>
+      <view class="btn primary" bindtap="saveAdd">{{add.saveLabel}}</view>
+    </view>
+  </view>
+
+  <!-- ============ Sheet 2: 使用 / 修改调休 ============ -->
+  <view class="sheet {{leave.show?'show':''}}">
+    <view class="grab"></view>
+    <h2>{{leave.title}}</h2>
+    <view class="sub">{{leave.sub}}</view>
+    <view class="body fixed">
+      <view class="field">
+        <label>调休使用日期</label>
+        <view class="di-box date-input {{leave.dateText?'':'di-ph'}}" bindtap="openDatePicker" data-target="lvDate">{{leave.dateText || 'yyyy/mm/dd'}}</view>
+      </view>
+      <view class="pick-head">
+        <text class="pt">选择抵扣的加班</text>
+        <text class="pa">可用 <text class="b">{{leave.avail}}h</text></text>
+      </view>
+      <view class="pick-scroll">
+        <view wx:if="{{!leave.picks.length}}" class="empty" style="padding:24px 8px"><view>当前没有可抵扣的加班时长</view><view>（可调休加班已用完或已过期）</view></view>
+        <view wx:for="{{leave.picks}}" wx:for-item="p" wx:key="id" class="pick {{p.checked?'on':''}}" bindtap="onPickTap" data-id="{{p.id}}">
+          <view class="cb">{{p.checked?'✓':''}}</view>
+          <view class="pi">
+            <view class="pd">{{p.dateWd}}<text class="wk"> · 可调休</text></view>
+            <view class="pr">剩余 <text class="b">{{p.maxText}}h</text> 可抵扣</view>
+          </view>
+          <!-- 时长列：未勾选时不渲染输入框（只显示横杠占位），勾选后才出现可编辑输入框。
+               catchtap 阻断冒泡到整行的 onPickTap —— 否则点输入框会顺带把该行反选掉，表现为「不能输入」；
+               聚焦即全选默认值，用户可直接键入部分抵扣时长、无需先删除 -->
+          <input wx:if="{{p.checked}}" class="amt" type="text" value="{{p.hoursText}}" placeholder="0.0" placeholder-class="amt-ph" selection-start="{{p.selStart}}" selection-end="{{p.selEnd}}" data-id="{{p.id}}" bindfocus="onPickAmtFocus" bindinput="onPickAmtInput" bindblur="onPickAmtBlur" catchtap="noop"/>
+          <text wx:else class="amt-dash">—</text>
+          <text class="unit">h</text>
+        </view>
+      </view>
+      <view class="rt">
+        <view class="rc"><view class="rk">本次抵扣</view><view class="rv">{{leave.rtUse}}h</view></view>
+        <view class="rc after {{leave.rtNeg?'neg':''}}"><view class="rk">抵扣后可用</view><view class="rv">{{leave.rtAfter}}h</view></view>
+      </view>
+    </view>
+    <view class="sheet-actions">
+      <view class="btn ghost" bindtap="closeSheets">取消</view>
+      <view class="btn primary" bindtap="saveLeave">{{leave.saveLabel}}</view>
+    </view>
+  </view>
+
+  <!-- ============ Sheet 3: 数据导入 ============ -->
+  <view class="sheet {{imp.show?'show':''}}">
+    <view class="grab"></view>
+    <h2>{{imp.title}}</h2>
+    <view class="sub">{{imp.sub}}</view>
+    <view class="body">
+      <!-- 「从本地文件选择」仅 PC 端展示：移动端小程序无法访问系统文件目录（沙箱限制），
+           wx.chooseMessageFile 在手机上只会弹「会话/聊天记录文件」列表，与下方
+           「从微信聊天文件选择」是同一个页面 —— 两个入口同时出现会造成误导。 -->
+      <view class="io-pick" wx:if="{{!mobile}}" bindtap="onImpLocalFile">
+        <view class="io-ico"><view class="ic ic-file"></view></view>
+        <view class="io-txt"><view class="io-name">从本地文件选择</view><view class="io-desc">从设备本地选择 .json 备份文件</view></view>
+        <text class="io-arrow">›</text>
+      </view>
+      <view class="io-pick" bindtap="onImpChatFile">
+        <view class="io-ico wx"><view class="ic ic-wx"></view></view>
+        <view class="io-txt"><view class="io-name">从微信聊天文件选择</view><view class="io-desc">从微信聊天记录中选择 .json 备份文件</view></view>
+        <text class="io-arrow">›</text>
+      </view>
+      <view class="io-pick" bindtap="onImpClipboard">
+        <view class="io-ico doc"><view class="ic ic-copy"></view></view>
+        <view class="io-txt"><view class="io-name">从剪贴板导入</view><view class="io-desc">粘贴已复制的备份文本</view></view>
+        <text class="io-arrow">›</text>
+      </view>
+      <view class="io-tip">支持本小程序导出的 JSON 备份。导入按记录 ID 合并：同 ID 覆盖，新 ID 追加，不会删除已有记录。</view>
+      <view class="io-tip" wx:if="{{mobile}}">手机端微信不支持小程序读取本地文件，请先用「文件传输助手」把 .json 备份发送到微信，再从「从微信聊天文件选择」导入。</view>
+    </view>
+    <view class="sheet-actions">
+      <view class="btn ghost" bindtap="closeSheets">取消</view>
+    </view>
+  </view>
+
+  <!-- ============ Sheet 4: 数据导出 ============ -->
+  <view class="sheet {{exp.show?'show':''}}">
+    <view class="grab"></view>
+    <h2>{{exp.title}}</h2>
+    <view class="sub">{{exp.sub}}</view>
+    <view class="body">
+      <view class="io-sum">
+        <view class="io-ico"><view class="ic ic-check"></view></view>
+        <view class="io-st"><view class="io-name">{{exp.file}}</view><view class="io-desc">{{exp.meta}}</view></view>
+      </view>
+      <!-- 「保存到本地文件」仅 PC 端展示：wx.saveFileToDisk 官方文档标注
+           「微信 Windows 版 / Mac 版：支持」，移动端调用必然失败（只能回退为复制文本）。 -->
+      <view class="io-pick" wx:if="{{!mobile}}" bindtap="onExpSaveDisk">
+        <view class="io-ico"><view class="ic ic-dl"></view></view>
+        <view class="io-txt"><view class="io-name">保存到本地文件</view><view class="io-desc">导出 .json 备份到设备本地</view></view>
+        <text class="io-arrow">›</text>
+      </view>
+      <view class="io-pick" bindtap="onExpShare">
+        <view class="io-ico wx"><view class="ic ic-wx"></view></view>
+        <view class="io-txt"><view class="io-name">发送到微信</view><view class="io-desc">转发备份文件给好友、群或文件传输助手</view></view>
+        <text class="io-arrow">›</text>
+      </view>
+      <view class="io-pick" bindtap="onExpCopy">
+        <view class="io-ico doc"><view class="ic ic-copy"></view></view>
+        <view class="io-txt"><view class="io-name">复制为文本</view><view class="io-desc">复制 JSON 备份文本到剪贴板</view></view>
+        <text class="io-arrow">›</text>
+      </view>
+      <view class="io-tip">备份包含全部加班与调休记录（含抵扣明细），可在任意设备通过「导入数据」还原。</view>
+    </view>
+    <view class="sheet-actions">
+      <view class="btn ghost" bindtap="closeSheets">取消</view>
+    </view>
+  </view>
+
+  <!-- ============ 全局下拉面板 ============ -->
+  <view class="dd-shade" wx:if="{{dd.show}}" bindtap="closeDropdown"></view>
+  <view class="dd-panel {{dd.up?'up':''}} {{dd.show?'show':''}}" style="top:{{dd.top}}px;left:{{dd.left}}px;width:{{dd.width}}px;">
+    <view wx:if="{{dd.type==='sel'}}" class="dd-list">
+      <view wx:for="{{dd.options}}" wx:for-item="o" wx:key="v" class="dd-opt {{o.sel?'sel':''}}" bindtap="onDdOptionTap" data-k="v" data-v="{{o.v}}">
+        <text class="t">{{o.label}}</text>
+        <view class="ic ic-tick"></view>
+      </view>
+    </view>
+    <view wx:if="{{dd.type==='time'}}" class="dd-cols">
+      <view class="dd-col">
+        <view class="dd-hd">时</view>
+        <view class="dd-list">
+          <view wx:for="{{dd.hours}}" wx:for-item="h" wx:key="*this" class="dd-opt {{dd.hourSel===h?'sel':''}}" bindtap="onDdTimeTap" data-k="h" data-v="{{h}}">{{h}}</view>
+        </view>
+      </view>
+      <view class="dd-col">
+        <view class="dd-hd">分</view>
+        <view class="dd-list">
+          <view wx:for="{{dd.minutes}}" wx:for-item="m" wx:key="*this" class="dd-opt {{dd.minuteSel===m?'sel':''}}" bindtap="onDdTimeTap" data-k="m" data-v="{{m}}">{{m}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ============ 自绘日历 ============ -->
+  <view class="dp-mask {{dp.show?'show':''}}" bindtap="onDpMaskTap">
+    <view class="dp-panel" catchtap="noop">
+      <view class="dp-top">
+        <view class="dp-btn" bindtap="onDpPrevYear">«</view>
+        <view class="dp-btn" bindtap="onDpPrevMonth">‹</view>
+        <view class="dp-title" bindtap="onDpTitleTap">{{dp.title}}</view>
+        <view class="dp-btn" bindtap="onDpNextMonth">›</view>
+        <view class="dp-btn" bindtap="onDpNextYear">»</view>
+      </view>
+      <view wx:if="{{dp.view==='date'}}">
+        <view class="dp-week"><text>日</text><text>一</text><text>二</text><text>三</text><text>四</text><text>五</text><text>六</text></view>
+        <view class="dp-grid">
+          <view wx:for="{{dp.cells}}" wx:for-item="c" wx:key="iso" class="dp-cell {{c.cls}}" bindtap="onDpCellTap" data-iso="{{c.iso}}">{{c.day}}</view>
+        </view>
+      </view>
+      <view wx:elif="{{dp.view==='month'}}">
+        <view class="dp-grid cols3">
+          <view wx:for="{{dp.cells}}" wx:for-item="c" wx:key="m" class="dp-cell big {{c.cls}}" bindtap="onDpMonthTap" data-m="{{c.m}}">{{c.label}}</view>
+        </view>
+      </view>
+      <view wx:else>
+        <view class="dp-grid cols3">
+          <view wx:for="{{dp.cells}}" wx:for-item="c" wx:key="y" class="dp-cell big {{c.cls}}" bindtap="onDpYearTap" data-y="{{c.y}}">{{c.y}}</view>
+        </view>
+      </view>
+      <view class="dp-foot">
+        <view class="dp-btn2" bindtap="onDpClear">清除</view>
+        <view class="dp-btn2" bindtap="onDpToday">今天</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ============ Toast ============ -->
+  <view class="toast {{toastShow?'show':''}}">{{toastMsg}}</view>
+
+  <!-- ============ 隐私授权弹窗 ============ -->
+  <privacy-popup />
+</view>

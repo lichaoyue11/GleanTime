@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>拾时簿 GleanTime · 头像方案 G（双环进度 · 数据感）</title>
+  <rect width="512" height="512" rx="116" fill="#FFFFFF"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#4C8BF5" stroke-width="36"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#27BD86" stroke-width="36"
+          stroke-linecap="round" stroke-dasharray="654 942"
+          transform="rotate(-90 256 256)"/>
+  <circle cx="256" cy="256" r="20" fill="#2F63CF"/>
+</svg>

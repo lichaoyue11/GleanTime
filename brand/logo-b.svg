@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <title>拾时簿 GleanTime · 头像方案 B（「时」字标）</title>
+  <rect x="0" y="0" width="144" height="144" fill="#EAF1FF"/>
+  <text x="70.3" y="100.3" text-anchor="middle"
+        font-family="Microsoft YaHei, 微软雅黑, PingFang SC, sans-serif"
+        font-size="80" font-weight="700" fill="#2F63CF">时</text>
+  <circle cx="104" cy="42" r="8" fill="#27BD86"/>
+</svg>

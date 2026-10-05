@@ -1,0 +1,45 @@
+/* 自绘左滑操作：与原型 .swipe / .swipe-actions / .swipe-action / .swipe-content 1:1 对应。
+   说明：原型里 .rec/.leave 与 .swipe-content 是同一元素（白卡即位移目标）；本组件为「透明位移包装 + 插槽内白卡」，
+   故 .swipe-content 仅作位移/层级容器（透明），白卡外观由插槽内的 .rec/.leave 提供（见 index.wxss），视觉等价。 */
+.swipe {
+  position: relative;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--card);
+}
+/* 拖拽露出或定格展开时容器转主色蓝，与最内侧「修改」按钮同色，杜绝白卡圆角处渗色 */
+.swipe.is-open, .swipe.revealing { background: var(--primary); }
+
+/* 动作条：flex 容纳「修改(蓝) + 删除/撤销(红)」，闭合态 visibility:hidden 整条不绘制 */
+.swipe-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  background: var(--primary);
+  visibility: hidden;
+}
+.swipe.is-open .swipe-actions, .swipe.revealing .swipe-actions { visibility: visible; }
+.swipe-action {
+  width: 76px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+.swipe-action.edit { background: var(--primary); }                 /* 修改：主色蓝 */
+.swipe-action.del { background: var(--red); border-radius: 0 18px 18px 0; } /* 删除/撤销：红，右圆角与外缘裁剪一致 */
+.swipe-action:active { filter: brightness(.94); }
+
+/* 位移/层级容器：透明，承载 transform 与 z-index:1 压在动作条之上 */
+.swipe-content {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  transition: transform .25s;
+}
+.swipe-content.no-trans { transition: none; }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>拾时簿 GleanTime · 头像方案 E（沙漏 · 经典时间意象）</title>
+  <rect width="512" height="512" rx="116" fill="#EAF1FF"/>
+  <rect x="168" y="150" width="176" height="22" rx="11" fill="#2F63CF"/>
+  <rect x="168" y="340" width="176" height="22" rx="11" fill="#2F63CF"/>
+  <path d="M178 172 L334 172 L286 256 L226 256 Z" fill="none"
+        stroke="#2F63CF" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M226 256 L286 256 L334 340 L178 340 Z" fill="none"
+        stroke="#2F63CF" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M214 196 L298 196 L270 234 L242 234 Z" fill="#9DBDF6" opacity="0.55"/>
+  <path d="M236 290 L276 290 L320 332 L192 332 Z" fill="#27BD86"/>
+  <rect x="252" y="256" width="8" height="40" rx="4" fill="#27BD86"/>
+</svg>

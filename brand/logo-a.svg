@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <title>拾时簿 GleanTime · 头像方案 A（表盘 + 对勾）</title>
+  <defs>
+    <linearGradient id="bgA" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5B96F8"/>
+      <stop offset="1" stop-color="#2F63CF"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="144" height="144" fill="url(#bgA)"/>
+  <circle cx="72" cy="72" r="38" fill="none" stroke="#ffffff" stroke-width="10"/>
+  <path d="M56 72 L68 84 L88 58" fill="none" stroke="#27BD86" stroke-width="12"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

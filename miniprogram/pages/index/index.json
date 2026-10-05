@@ -1,0 +1,7 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "swipe-item": "/components/swipe-item/swipe-item",
+    "privacy-popup": "/components/privacy-popup/privacy-popup"
+  }
+}

@@ -1,0 +1,10 @@
+<view class="swipe {{open ? 'is-open' : ''}} {{revealing ? 'revealing' : ''}}">
+  <view class="swipe-actions">
+    <view class="swipe-action edit" catchtap="onEdit">修改</view>
+    <view class="swipe-action del" catchtap="onDelete">{{delLabel}}</view>
+  </view>
+  <view class="swipe-content {{dragging ? 'no-trans' : ''}}" style="transform: translateX({{offset}}px);"
+    bindtouchstart="ts" bindtouchmove="tm" bindtouchend="te" catchtap="onContentTap">
+    <slot></slot>
+  </view>
+</view>

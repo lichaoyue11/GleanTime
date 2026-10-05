@@ -1,0 +1,3151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>加班时长记录 · 原型预览</title>
+<style>
+  :root{
+    --primary:#4c8bf5;
+    --primary-strong:#3a73e0;
+    --primary-soft:#eaf1ff;
+    --primary-dark:#3a73e0;
+    /* 强调态专用深蓝：仅作「文字 / 描边」色（不再用于整块实心填充），
+       保证浅蓝底上的深蓝字达到正文级对比度（见 --primary-sel 注释）；
+       直接用 --primary 作文字仅 2.93~3.32:1，可读性不足。 */
+    --primary-deep:#2f63cf;
+    /* 下拉「选中项」的柔和浅蓝底：替代原先的深蓝实心填充，整行不再压沉。
+       深蓝字于 #e3edff 上 4.68:1（≥4.5），且比悬停态 --primary-soft(#eaf1ff) 深一档，
+       使「选中 vs 悬停」在底色上仍可区分；按下态 #dfeaff 为 4.56:1，同样达标。 */
+    --primary-sel:#e3edff;
+    --green:#27bd86;
+    --green-soft:#eafaf3;
+    --red:#fb5d5d;
+    --red-soft:#fff1f1;
+    --amber:#f5a623;
+    --amber-soft:#fef3df;
+    --text:#1e2430;
+    --text-2:#8a909c;
+    --text-3:#b6bcc6;
+    --bg:#eef1f6;
+    --card:#ffffff;
+    --divider:#eef1f5;
+    --shadow:0 10px 28px rgba(24,39,75,.08);
+    --shadow-sm:0 2px 10px rgba(24,39,75,.05);
+    --sh-lg:0 24px 60px rgba(24,39,75,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  /* 全局移除数字/时间类输入的原生「上下调节箭头」(spinner)。
+     时间输入已改用 type="text" + inputmode="decimal"，本身不再有调节控件；
+     此规则作为兜底，确保任何 number/time 输入也不会渲染出增减箭头。 */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button{
+    -webkit-appearance:none;appearance:none;display:none;margin:0;height:0;width:0;
+  }
+  input[type="number"]{-moz-appearance:textfield;appearance:textfield;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(120% 120% at 50% 0%, #f3f6fc 0%, #e7ecf3 55%, #dfe5ee 100%);
+    display:flex;align-items:center;justify-content:center;
+    /* 宽屏下：手机预览 + 右侧交互说明面板并排；gap 为两者间距 */
+    gap:44px;
+    min-height:100vh;padding:24px;color:var(--text);
+  }
+
+  /* ===== Phone frame ===== */
+  .phone{
+    position:relative; width:390px; height:844px; background:var(--bg);
+    border-radius:46px; box-shadow:var(--sh-lg), 0 0 0 12px #15181f, 0 0 0 14px #2a2e34;
+    overflow:hidden; display:flex; flex-direction:column; flex:none;
+  }
+  .screen{
+    width:100%;height:100%;background:var(--bg);border-radius:36px;overflow:hidden;
+    position:relative;display:flex;flex-direction:column;
+  }
+  /* ===== Status bar ===== */
+  .statusbar{
+    height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px 0 26px;font-size:13px;font-weight:600;color:var(--text);background:var(--card);
+  }
+  .statusbar .right{display:flex;align-items:center;gap:6px;}
+  .statusbar svg{display:block;}
+
+  /* ===== App bar ===== */
+  .appbar{
+    height:56px;flex:none;display:flex;align-items:center;justify-content:center;
+    padding:0 16px;background:var(--card);border-bottom:1px solid var(--divider);
+  }
+  .appbar .title{font-size:17px;font-weight:700;letter-spacing:.3px;text-align:center;}
+
+  /* ===== Pages ===== */
+  .pages{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:var(--bg);}
+  .page{display:none;padding:16px 16px 92px;}
+  .page.active{display:block;}
+
+  /* ===== Summary cards ===== */
+  .summary-row{display:flex;gap:10px;margin-bottom:16px;}
+  .sumcard{
+    flex:1;background:var(--card);border-radius:18px;padding:14px 12px;
+    box-shadow:var(--shadow-sm);border:1px solid var(--divider);text-align:center;
+  }
+  .sumcard .v{font-size:22px;font-weight:800;color:var(--primary);line-height:1.1;}
+  .sumcard .v small{font-size:12px;font-weight:600;color:var(--text-2);}
+  .sumcard .k{font-size:12px;color:var(--text-2);margin-top:6px;}
+  .sumcard.alt .v{color:var(--green);}
+  .sumcard.amber .v{color:var(--amber);}
+  .sumcard.red .v{color:var(--red);}
+
+  /* ===== Section title ===== */
+  .sec-title{font-size:14px;font-weight:700;color:var(--text-2);margin:4px 4px 10px;letter-spacing:.4px;
+    display:flex;align-items:center;justify-content:space-between;}
+  .sec-title .count{font-weight:600;color:var(--text-3);font-size:13px;}
+
+  /* ============================================================
+     下拉类控件统一体系（.dd）
+     ------------------------------------------------------------
+     页面内所有「点击后展开一组候选值」的控件共用这一套外观与状态：
+       · 年-月筛选（加班记录页 / 调休记录页）
+       · 起止时间选择（添加加班弹窗）
+       · 日期选择（.date-input，展开自绘日历）
+     四态反馈：默认 / 悬停(.dd:hover) / 聚焦·展开(.dd-trigger:focus-visible, .dd.open) /
+     已选定(.dd.on)，面板选项另有 悬停 / 按下 / 选中 三态。
+     面板挂载在 .phone 上做绝对定位，避免被 .sheet / .field 的 overflow 裁剪。
+     ============================================================ */
+  .dd{position:relative;}
+  .dd-trigger{
+    -webkit-appearance:none;appearance:none;width:100%;
+    display:flex;align-items:center;gap:8px;text-align:left;
+    padding:12px 14px;border:1.5px solid var(--divider);border-radius:13px;
+    background:#fafbfc;font-family:inherit;font-size:15px;font-weight:700;color:var(--text);
+    cursor:pointer;outline:none;
+    transition:border-color .16s,background-color .16s,box-shadow .16s,color .16s;
+  }
+  /* 触发器的度量/文案/图标（交互状态统一在下文「交互状态」段，靠后写以获得正确优先级） */
+  .dd-val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dd-ico{width:12px;height:12px;flex:none;color:var(--text-3);transition:transform .22s,color .16s;}
+  .dd-lead{width:16px;height:16px;flex:none;color:var(--text-3);transition:color .16s;}
+
+  /* ---- 下拉面板 ---- */
+  .dd-panel{
+    position:absolute;left:0;top:0;z-index:70;
+    display:flex;flex-direction:column;          /* 空间不足时由 .dd-list 内部滚动，而非裁剪 */
+    background:var(--card);border:1px solid var(--divider);border-radius:16px;
+    box-shadow:0 18px 44px rgba(24,39,75,.20), 0 2px 8px rgba(24,39,75,.06);
+    padding:6px;overflow:hidden;
+    opacity:0;transform:translateY(-6px) scale(.985);transform-origin:top center;
+    pointer-events:none;transition:opacity .15s ease,transform .15s ease;
+  }
+  .dd-panel.up{transform-origin:bottom center;transform:translateY(6px) scale(.985);}
+  .dd-panel.show{opacity:1;transform:none;pointer-events:auto;}
+  .dd-list{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+    max-height:250px;scrollbar-width:none;}
+  .dd-list::-webkit-scrollbar{width:0;}
+  .dd-opt{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:10px 12px;border-radius:11px;
+    font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer;
+    transition:background-color .13s,color .13s,box-shadow .13s;white-space:nowrap;
+  }
+  .dd-opt .t{overflow:hidden;text-overflow:ellipsis;}
+  .dd-opt .tick{width:14px;height:14px;flex:none;opacity:0;transition:opacity .13s;}
+  .dd-opt:hover{background:var(--primary-soft);color:var(--primary-deep);}
+  .dd-opt:active{background:#dbe7ff;color:var(--primary-deep);}
+  .dd-opt:focus-visible,.dd-opt.kb{outline:none;background:var(--primary-soft);color:var(--primary-deep);box-shadow:inset 0 0 0 2px #c9daff;}
+  /* 选中态：柔和浅蓝底 + 深蓝字 + 细描边 + 勾号（弃用深蓝实心填充，整行更轻、与
+     页面其它「选中」语言一致：浅底蓝字）。与悬停态靠「底色深一档 + 描边 + 勾号 + 加粗」区分 */
+  .dd-opt.sel{
+    background:var(--primary-sel);color:var(--primary-deep);font-weight:700;
+    box-shadow:inset 0 0 0 1.5px #b9ccff;
+  }
+  /* 悬停只加强描边、不再加深底色：深蓝字于 #e3edff 为 4.68:1，
+     若底色继续加深（如 #d5e3ff）会掉到 4.27:1 跌破 AA，故用描边做反馈 */
+  .dd-opt.sel:hover{box-shadow:inset 0 0 0 1.5px var(--primary);}
+  .dd-opt.sel:active{background:#dfeaff;}   /* 按下态微沉一档，4.56:1 仍达标 */
+  .dd-opt.sel .tick{opacity:1;}
+  /* 键盘高亮落在「已选中」项上：底色同为浅蓝，改用主色描边环区分；
+     时间双列里的选中项选择器特异性更高，故此处并列补一条 .dd-col 变体以胜出 */
+  .dd-opt.sel.kb, .dd-col .dd-opt.sel.kb{box-shadow:inset 0 0 0 2px var(--primary);}
+  /* 时间下拉：时 / 分 双列 */
+  .dd-panel.time{padding:8px;}
+  .dd-cols{display:flex;gap:8px;flex:1 1 auto;min-height:0;}
+  .dd-col{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
+  /* 轴标签做成浅蓝胶囊：深蓝字于浅蓝底 4.87:1，远优于 text-3 的 1.91:1 */
+  .dd-hd{
+    flex:none;font-size:11px;font-weight:800;letter-spacing:.8px;text-align:center;
+    padding:3px 0;margin-bottom:7px;border-radius:999px;
+    color:var(--primary-deep);background:var(--primary-soft);
+  }
+  .dd-col .dd-list{max-height:206px;background:var(--bg);border-radius:11px;padding:4px;}
+  .dd-col .dd-opt{justify-content:center;font-size:14px;font-weight:700;padding:9px 4px;
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  .dd-col .dd-opt.sel{box-shadow:0 3px 10px rgba(47,99,207,.32);}
+
+  /* ---- 筛选栏（卡片/胶囊变体，置于浅灰底上） ---- */
+  .filter-bar{display:flex;gap:10px;margin-bottom:14px;}
+  .filter-bar .dd{flex:1;min-width:0;}
+  .filter-bar .dd.fyear{flex:1.06;}             /* 年份文字略长，给多一点宽度 */
+  .filter-bar .dd-trigger{
+    height:42px;padding:0 12px 0 14px;border-width:1px;border-radius:14px;
+    background:var(--card);font-size:13.5px;box-shadow:var(--shadow-sm);
+  }
+  .filter-bar .dd-trigger:hover{border-color:#c9daff;background:#fbfcff;}
+  .filter-bar .dd.on .dd-trigger{
+    background:var(--primary-soft);border-color:#c9daff;color:var(--primary-deep);
+    box-shadow:0 2px 10px rgba(76,139,245,.14);
+  }
+  .filter-bar .dd.on .dd-ico{color:var(--primary-deep);}
+  .freset{
+    flex:none;width:42px;height:42px;border:1px solid var(--divider);border-radius:14px;
+    background:var(--card);color:var(--text-2);box-shadow:var(--shadow-sm);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:background-color .16s,color .16s,border-color .16s;
+  }
+  .freset:hover{color:var(--primary);border-color:#c9daff;background:#fbfcff;}
+  .freset:active{background:var(--bg);color:var(--text);}
+  .freset[hidden]{display:none;}
+
+  /* ============================================================
+     交互状态（统一在此定义，置于 .filter-bar 变体之后）：
+       · 用 .filter-bar .dd-trigger:focus-visible 把特异性抬到 (0,3,0)，
+         确保筛选触发器的键盘聚焦环不被 .filter-bar .dd-trigger 默认态或 .on 态覆盖；
+       · 悬停 / 展开 态同步覆盖全部 .dd-trigger（时间下拉、年-月筛选），风格统一。
+     ============================================================ */
+  .dd-trigger:hover{
+    border-color:var(--primary);
+    background:#fbfcff;
+    box-shadow:0 4px 14px rgba(76,139,245,.16);
+  }
+  .dd-trigger:focus-visible,
+  .filter-bar .dd-trigger:focus-visible{
+    border-color:var(--primary);
+    background:#fbfcff;
+    box-shadow:0 0 0 3px rgba(76,139,245,.30);
+  }
+  .dd.open .dd-trigger{
+    border-color:var(--primary);
+    background:#fbfcff;
+    box-shadow:0 4px 14px rgba(76,139,245,.16);
+  }
+  .dd:hover .dd-ico, .dd.open .dd-ico,
+  .dd:hover .dd-lead, .dd.open .dd-lead{ color:var(--primary-deep); }
+  /* 筛选触发器：展开时保持浅蓝填充并叠加聚焦环（与「已选值」.on 态一致） */
+  .filter-bar .dd.open .dd-trigger{
+    background:var(--primary-soft);border-color:var(--primary);color:var(--primary-deep);
+    box-shadow:0 0 0 3px rgba(76,139,245,.26), 0 2px 10px rgba(76,139,245,.14);
+  }
+  .filter-bar .dd:hover .dd-ico, .filter-bar .dd.open .dd-ico,
+  .filter-bar .dd:hover .dd-lead, .filter-bar .dd.open .dd-lead{ color:var(--primary-deep); }
+
+  /* ===== Record list ===== */
+  .rec{
+    background:var(--card);border-radius:18px;padding:14px;
+    box-shadow:var(--shadow-sm);border:1px solid var(--divider);
+    display:flex;align-items:center;gap:12px;
+  }
+  .rec-main{flex:1;min-width:0;}
+  .rec .top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .rec .date{font-size:16px;font-weight:800;letter-spacing:.2px;white-space:nowrap;}
+  .rec .dur{
+    background:var(--primary-soft);color:var(--primary);font-weight:800;font-size:15px;
+    padding:5px 11px;border-radius:12px;white-space:nowrap;
+  }
+  .rec .mid{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text-2);font-size:13px;}
+  .rec .mid svg{opacity:.7;flex:none;}
+  /* 时间区间：不折行，空间不足时省略，避免挤压右侧「有效时长」 */
+  .rec .mid .tm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* 有效加班时长（累计口径） */
+  .rec .mid .eff{margin-left:auto;font-size:12.5px;font-weight:800;color:var(--text-2);white-space:nowrap;}
+  .rec .mid .eff b{color:var(--primary);}
+  .rec .reason{margin-top:10px;font-size:14px;color:var(--text);line-height:1.45;}
+  .rec .tags{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .tag{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:8px;}
+  .tag.comp{background:var(--green-soft);color:var(--green);}
+  .tag.paid{background:var(--amber-soft);color:#b9791a;}
+  .tag.used{background:var(--primary-soft);color:var(--primary);}
+  .tag.exp{background:var(--red-soft);color:var(--red);}
+  .tag.pr{background:#f0edfe;color:#7b61d8;}
+  /* 每笔可调休加班的「有效截止日」标记：中性灰蓝；已过期则转为红色提示 */
+  .tag.valid{background:#f2f4f8;color:var(--text-2);font-weight:600;letter-spacing:.2px;}
+  .tag.valid.exp{background:var(--red-soft);color:var(--red);}
+  /* 抵扣标注区 */
+  .deduct-box{
+    margin-top:12px;background:var(--bg);border:1px dashed var(--divider);border-radius:12px;padding:10px 12px;
+  }
+  .deduct-box .dh{font-size:11.5px;font-weight:800;color:var(--text-2);letter-spacing:.4px;margin-bottom:7px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .deduct-box .dh .rem{color:var(--green);}
+  .deduct-line{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;color:var(--text);}
+  .deduct-line .amt{font-weight:800;color:var(--primary);white-space:nowrap;}
+  /* ===== 右滑操作（移动端滑动交互，与记账原型列表风格一致） ===== */
+  /* 结构：.swipe(圆角裁剪+底色) > .swipe-actions(动作条，绝对定位于右缘) + .swipe-content(白卡)
+     闭合态：动作条整条不绘制（visibility:hidden），白卡圆角身后只剩容器白底 -> 零渗色；
+     展开态：动作条显示、容器转主色蓝，与最内侧「修改」按钮同色 -> 白卡右圆角处不露异色边。
+     两条必须同时满足，否则会在白卡右上/右下圆角渗出动作按钮的颜色：
+       1) 展开底色必须等于最内侧动作按钮的颜色（当前 --primary）；
+       2) 动作条只允许在「有内容露出」时绘制（见下 .swipe-actions 的 visibility 规则）。
+     历史坑：闭合态红色「删除/撤销」按钮一直贴在白卡右圆角正后方，
+     圆角抗锯齿把「卡片白 × 按钮红」混成一弯淡红月牙（右上/右下角红边），已由规则 2 根治。 */
+  .swipe{ position:relative; margin-bottom:12px; overflow:hidden; border-radius:18px; background:var(--card); }
+  /* 底色须在「拖拽露出」与「拖拽结束」两态一致生效，否则拖拽中容器仍是白底，
+     内容卡圆角处会露出白色缺口（拖动结束时才因 .is-open 变色）：
+     - .is-open：拖动结束、按钮完全露出后的定格态；
+     - .revealing：拖拽过程中内容已左移露出动作条时叠加，并沿用至回弹动画结束，
+       使「拖拽中」与「拖拽结束」渲染完全一致。 */
+  .swipe.is-open, .swipe.revealing{ background:var(--primary); }
+  /* 右滑动作区：flex 容器容纳多个等宽动作按钮（修改 + 删除/撤销），与现有删除样式保持一致。
+     visibility 与 .swipe 的展开态严格同步：闭合（既非 is-open 也非 revealing）时整条动作区不绘制，
+     从根上杜绝「动作按钮颜色从白卡圆角处渗出来」——曾在右上/右下角表现为红色月牙。
+     用 visibility 而非 display，保证拖拽露出的那一帧即时可见（无过渡、不参与布局重排）。 */
+  .swipe-actions{ position:absolute; top:0; right:0; bottom:0; display:flex; background:var(--primary); visibility:hidden; }
+  .swipe.is-open .swipe-actions, .swipe.revealing .swipe-actions{ visibility:visible; }
+  .swipe-action{
+    width:76px; color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .swipe-action.edit{ background:var(--primary); }                                   /* 修改：主色蓝，与删除红区分 */
+  .swipe-action.del{ background:var(--red); border-radius:0 18px 18px 0; }            /* 删除/撤销：红，右圆角与外层裁剪半径(18px)一致，四角由容器精确收边 */
+  .swipe-action:active{ filter:brightness(.94); }
+  .swipe-content{ position:relative; z-index:1; background:var(--card); border-radius:18px; touch-action:pan-y; }
+
+  .empty{text-align:center;color:var(--text-3);padding:48px 16px;font-size:14px;line-height:1.6;}
+
+  /* ===== Stats page ===== */
+  .stat-card{background:var(--card);border-radius:22px;padding:20px;box-shadow:var(--shadow-sm);border:1px solid var(--divider);margin-bottom:14px;}
+  .stat-card h3{margin:0 0 14px;font-size:15px;font-weight:700;}
+  .donut-wrap{display:flex;align-items:center;gap:22px;}
+  .donut{
+    width:150px;height:150px;border-radius:50%;flex:none;position:relative;
+  }
+  .donut::before{
+    content:"";position:absolute;inset:24px;background:var(--card);border-radius:50%;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,.05);
+  }
+  .donut .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .donut .center .big{font-size:26px;font-weight:800;color:var(--green);line-height:1;}
+  .donut .center .lbl{font-size:12px;color:var(--text-2);margin-top:4px;}
+  .legend{flex:1;}
+  .legend .item{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:14px;}
+  .legend .dot{width:12px;height:12px;border-radius:4px;flex:none;}
+  .legend .item .lv{margin-left:auto;font-weight:800;font-size:15px;}
+  .legend .item .lk{color:var(--text-2);font-size:12px;}
+
+  .bigstat{display:flex;gap:12px;}
+  .bigstat .b{flex:1;background:var(--primary-soft);border-radius:18px;padding:16px;text-align:center;}
+  .bigstat .b .v{font-size:24px;font-weight:800;color:var(--primary);}
+  .bigstat .b .v small{font-size:13px;color:var(--text-2);font-weight:600;}
+  .bigstat .b .k{font-size:12.5px;color:var(--text-2);margin-top:6px;}
+  .bigstat .b.g{background:var(--green-soft);}
+  .bigstat .b.g .v{color:var(--green);}
+  .bigstat .b.a{background:var(--amber-soft);}
+  .bigstat .b.a .v{color:#b9791a;}
+  .bigstat .b.n{background:#f0edfe;}
+  .bigstat .b.n .v{color:#7b61d8;}
+
+  /* ---- 有效期规则说明（时长统计页末尾） ---- */
+  .rule-card h3{margin-bottom:10px;}
+  .rule-item{padding:12px 0;border-top:1px dashed var(--divider);}
+  .rule-item:first-of-type{border-top:none;padding-top:0;}
+  .rule-tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.2px;
+    padding:4px 9px;border-radius:8px;background:var(--primary-soft);color:var(--primary-deep);}
+  .rule-tag.alt{background:var(--green-soft);color:var(--green);}
+  .rule-tag.plain{background:#f2f4f8;color:var(--text-2);}
+  .rule-txt{margin-top:7px;font-size:12.5px;line-height:1.7;color:var(--text-2);}
+  .rule-txt b{color:var(--text);font-weight:700;}
+  .rule-txt .eg{display:block;margin-top:3px;font-size:11.5px;color:var(--text-3);}
+  .rule-foot{margin-top:14px;padding-top:12px;border-top:1px dashed var(--divider);
+    font-size:11.5px;line-height:1.7;color:var(--text-3);text-align:center;}
+
+  /* ---- 小程序版本号（时长统计页底部居中显示，值由 JS 常量 APP_VERSION 注入） ---- */
+  .app-version{margin:22px 4px 12px;text-align:center;font-size:12px;color:var(--text-3);
+    letter-spacing:.3px;user-select:none;}
+  .app-version b{color:var(--text-2);font-weight:600;}
+
+  /* ---- 数据导入 / 导出（调休有效期规则模块上方） ----
+     两个按钮等分并排、同高 48px，均带线性图标以便快速辨识：
+       · 导入 = 白底 + 蓝色描边 + 蓝字（不再用低对比灰块，放大点击热区 ≥48px）
+       · 导出 = 主色渐变实心（主操作），带同色投影强化「可按」
+     两者都补 hover / active / focus-visible 三态反馈。 */
+  .data-io{display:flex;gap:10px;margin-bottom:14px;}
+  .data-io .btn{flex:1;}
+  .io-btn{display:flex;align-items:center;justify-content:center;gap:7px;height:48px;padding:0 12px;white-space:nowrap;}
+  .io-btn svg{width:17px;height:17px;flex:none;}
+  .io-btn:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(76,139,245,.35);}
+  /* 描边用 --primary-strong 而非浅蓝 #b9ccff：浅蓝边与浅灰页底的对比度仅 1.41:1，
+     不足以让「这是一个可点的按钮」被看见（WCAG 非文字元素建议 ≥3:1）；
+     #3a73e0 对页底约 3.9:1，同时蓝字对白底 5.5:1，边界与文字双重可辨。 */
+  .btn.outline{
+    background:#fff;color:var(--primary-deep);border:1.5px solid var(--primary-strong);
+    box-shadow:0 2px 10px rgba(24,39,75,.08);
+  }
+  .btn.outline:hover{background:var(--primary-soft);border-color:var(--primary-deep);}
+  .btn.primary.io-btn{box-shadow:0 6px 16px rgba(76,139,245,.30);}
+  .btn.primary.io-btn:hover{filter:brightness(1.05);}
+
+  /* ---- 导入 / 导出弹层内的「选择行」（来源选择 · 去向选择 · 聊天文件 · 联系人） ---- */
+  .io-sheet-head{display:flex;align-items:center;gap:6px;}
+  .io-sheet-head h2{margin:0;}
+  .io-back{
+    width:30px;height:30px;flex:none;margin-left:-6px;border:none;background:transparent;
+    color:var(--text-2);font-size:22px;line-height:1;cursor:pointer;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .io-back:hover{background:var(--bg);color:var(--text);}
+  .io-back[hidden]{display:none;}                       /* 覆盖上面的 display:flex，保证 hidden 生效 */
+  .io-pick{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;font-family:inherit;
+    background:#fff;border:1.5px solid var(--divider);border-radius:16px;padding:13px 14px;
+    margin-bottom:10px;cursor:pointer;
+    transition:border-color .16s,background-color .16s,box-shadow .16s,transform .16s;
+  }
+  .io-pick:hover{border-color:#c9daff;background:#fbfcff;box-shadow:0 4px 14px rgba(24,39,75,.07);}
+  .io-pick:active{transform:scale(.985);}
+  .io-pick:focus-visible{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(76,139,245,.25);}
+  .io-pick .io-ico{
+    width:38px;height:38px;border-radius:12px;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--primary-soft);color:var(--primary-deep);
+  }
+  .io-pick .io-ico svg{width:19px;height:19px;}
+  .io-pick .io-ico.wx{background:#e8f8ee;color:#12b45a;}     /* 微信绿 */
+  .io-pick .io-ico.doc{background:#fff5e6;color:#e08b19;}    /* 文件琥珀 */
+  .io-pick .io-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .io-pick .io-txt b{font-size:14px;font-weight:800;color:var(--text);word-break:break-all;}
+  .io-pick .io-txt i{font-style:normal;font-size:11.5px;color:var(--text-3);line-height:1.45;}
+  .io-pick .io-arrow{flex:none;color:var(--text-3);font-size:19px;line-height:1;}
+  .io-tip{margin:4px 2px 0;font-size:11.5px;line-height:1.6;color:var(--text-3);}
+  .io-sum{
+    display:flex;align-items:center;gap:11px;background:var(--bg);
+    border-radius:14px;padding:12px 14px;margin-bottom:14px;
+  }
+  .io-sum .io-ico{
+    width:36px;height:36px;border-radius:11px;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--green-soft);color:var(--green);
+  }
+  .io-sum .io-ico svg{width:18px;height:18px;}
+  .io-sum .io-st{flex:1;min-width:0;}
+  .io-sum .io-st b{display:block;font-size:13px;font-weight:800;color:var(--text);word-break:break-all;}
+  .io-sum .io-st i{font-style:normal;font-size:11.5px;color:var(--text-3);}
+  /* 自动复制被拦截时的兜底：把 JSON 落到可选中的只读文本框 */
+  .io-raw{
+    display:block;width:100%;height:152px;border:1.5px solid var(--divider);border-radius:14px;
+    padding:11px 12px;background:#fafbfc;outline:none;resize:none;word-break:break-all;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px;line-height:1.55;color:var(--text-2);
+  }
+  .io-raw:focus{border-color:var(--primary);background:#fff;}
+
+  /* ============================================================
+     时长统计 · 时间区间选择器（分段选择，参考主流记账小程序）
+       · 第一行：全部 / 去年 / 今年 / 时间 —— 互斥分段，选中态为主色实心胶囊；
+       · 第二行：仅当选中「时间」时展开，提供自定义起止日期（复用自绘日历）+ 清除；
+       · 说明行：非「全部」时显示当前生效区间与命中条数，使统计口径可见可验。
+     注：本组件只作用于「时长统计」页，与加班记录页的「年-月」下拉筛选相互独立。
+     ============================================================ */
+  .rng-bar{margin-bottom:14px;}
+  .rng-seg{display:flex;gap:8px;}
+  .rng-opt{
+    flex:1;min-width:0;height:42px;padding:0 6px;border:none;border-radius:999px;
+    display:flex;align-items:center;justify-content:center;gap:4px;
+    background:var(--card);box-shadow:var(--shadow-sm);
+    font-family:inherit;font-size:13.5px;font-weight:700;color:var(--text-2);
+    cursor:pointer;white-space:nowrap;outline:none;
+    transition:background-color .16s,color .16s,box-shadow .16s,transform .16s;
+  }
+  .rng-opt svg{width:14px;height:14px;flex:none;}
+  .rng-opt:hover{color:var(--primary-deep);box-shadow:0 4px 14px rgba(24,39,75,.10);}
+  .rng-opt:active{transform:scale(.97);}
+  .rng-opt:focus-visible{box-shadow:0 0 0 3px rgba(76,139,245,.30);}
+  /* 选中态沿用全站主操作按钮的同一套主色渐变（.btn.primary / .fab），保证风格统一 */
+  .rng-opt.on{
+    background:linear-gradient(135deg,#5a95f7,var(--primary-strong));color:#fff;
+    box-shadow:0 8px 18px rgba(76,139,245,.34);
+  }
+  .rng-custom{display:none;align-items:center;gap:6px;margin-top:10px;}
+  .rng-custom.show{display:flex;}
+  /* 起止日期：复用 .date-input（自带日历图标 + 自绘日历展开），此处只覆盖度量。
+     选择器带 .rng-bar 前缀提高特异性，避免被基础 .date-input 度量覆盖。 */
+  .rng-bar .rng-date{
+    flex:1;min-width:0;width:100%;height:42px;
+    border:1.5px solid var(--divider);border-radius:12px;
+    padding:0 32px 0 12px;
+    font-size:13px;font-weight:700;letter-spacing:.2px;color:var(--text);
+    background-color:#fafbfc;
+  }
+  .rng-bar .rng-date:hover{border-color:#cfd8ea;background-color:#fff;}
+  .rng-bar .rng-date:focus{border-color:var(--primary);background-color:#fff;box-shadow:0 0 0 3px rgba(76,139,245,.15);}
+  .rng-bar .rng-date::placeholder{font-weight:600;color:var(--text-3);}
+  .rng-sep{flex:none;font-size:12.5px;font-weight:700;color:var(--text-3);}
+  .rng-clear{
+    flex:none;height:42px;padding:0 12px;border:none;border-radius:12px;
+    background:var(--card);box-shadow:var(--shadow-sm);
+    font-family:inherit;font-size:13px;font-weight:700;color:var(--text-2);
+    cursor:pointer;outline:none;white-space:nowrap;
+    transition:color .16s,box-shadow .16s,transform .16s;
+  }
+  .rng-clear:hover{color:var(--primary-deep);box-shadow:0 4px 14px rgba(24,39,75,.10);}
+  .rng-clear:active{transform:scale(.97);}
+  .rng-clear:focus-visible{box-shadow:0 0 0 3px rgba(76,139,245,.30);}
+  .rng-note{margin:16px 4px 0;font-size:11.5px;color:var(--text-3);line-height:1.6;}
+  .rng-note[hidden]{display:none;}
+  /* 时间模式：说明行紧跟在自定义日期行后，间距单独收敛为 10px（其余模式仍保持 16px） */
+  .rng-custom.show + .rng-note{margin-top:10px;}
+  /* 加班记录页：顶部汇总改为随「年-月」筛选实时重算，用一行浅色说明让口径可见 */
+  .sum-note{margin:-8px 4px 12px;font-size:11.5px;color:var(--text-3);}
+  .sum-note[hidden]{display:none;}
+
+  /* ===== Leave page ===== */
+  /* 顶部三格直接复用加班记录页的 .summary-row/.sumcard（同一套组件与度量），
+     保证两页在布局结构、对齐方式、间距、字体与视觉风格上完全一致。
+     颜色仍按语义区分：可用=green(.alt)、已使用=primary(默认)、已过期=red(.red)。 */
+
+  .leave{
+    background:var(--card);border-radius:18px;padding:14px;
+    box-shadow:var(--shadow-sm);border:1px solid var(--divider);display:flex;align-items:flex-start;gap:12px;position:relative;
+  }
+  .leave .badge{width:8px;height:44px;border-radius:6px;flex:none;background:var(--primary);}
+  .leave .info{flex:1;min-width:0;}
+  .leave .info .d1{font-size:15px;font-weight:800;}
+  .leave .info .d2{font-size:12.5px;color:var(--text-2);margin-top:5px;line-height:1.55;}
+  .leave .info .d2 b{color:var(--text);font-weight:700;}
+  .leave .h{font-weight:800;font-size:16px;color:var(--primary);white-space:nowrap;flex:none;}
+
+  /* ===== FAB（与记账原型一致：纯图标圆形按钮，无文字说明） ===== */
+  .fab{
+    /* 定位基准是 .screen；底部导航 64px + 系统导航栏 30px + 20px 间距 = 114px，避免压住导航栏与列表 */
+    position:absolute;right:18px;bottom:calc(64px + 30px + 20px);width:56px;height:56px;padding:0;
+    border:none;border-radius:50%;
+    background:linear-gradient(135deg,#5a95f7,var(--primary-strong));color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 12px 26px rgba(76,139,245,.45);cursor:pointer;z-index:25;
+    transition:transform .15s;
+  }
+  .fab:active{transform:scale(.92);}
+  .fab.hide{display:none;}
+
+  /* ===== Bottom navigation ===== */
+  .bottomnav{
+    height:64px;flex:none;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);
+    border-top:1px solid var(--divider);box-shadow:0 -4px 16px rgba(24,39,75,.06);
+    display:flex;padding:6px 8px 0;
+  }
+  .navitem{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    color:var(--text-3);cursor:pointer;position:relative;border-radius:14px;transition:color .18s;
+  }
+  .navitem .lbl{font-size:11px;font-weight:600;}
+  .navitem svg{transition:transform .18s;}
+  .navitem.active{color:var(--primary);font-weight:600;}
+  .navitem.active svg{transform:translateY(-1px) scale(1.08);}
+
+  /* ===== System nav bar ===== */
+  .sysnav{flex:0 0 30px;height:30px;display:flex;align-items:center;justify-content:center;gap:40px;background:var(--card);border-top:1px solid var(--divider);}
+  .sysnav .sys-back{width:46px;height:24px;border:none;background:transparent;color:var(--text);font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .sysnav .sys-back:active{opacity:.5;}
+  .sysnav .sys-home{width:13px;height:13px;border-radius:50%;border:2px solid var(--text-3);}
+  .sysnav .sys-recent{width:13px;height:13px;border-radius:3px;border:2px solid var(--text-3);}
+
+  /* ===== Bottom sheet ===== */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40;}
+  .scrim.show{opacity:1;pointer-events:auto;}
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;background:var(--card);z-index:50;
+    border-radius:26px 26px 0 0;padding:12px 18px 26px;transform:translateY(110%);
+    transition:transform .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 -10px 30px rgba(0,0,0,.18);
+    max-height:92%;display:flex;flex-direction:column;
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet .grab{width:38px;height:4px;border-radius:3px;background:#dcdee5;margin:2px auto 14px;flex:none;}
+  .sheet h2{margin:0 0 4px;font-size:18px;font-weight:800;}
+  .sheet .sub{font-size:12.5px;color:var(--text-2);margin-bottom:16px;flex:none;line-height:1.5;}
+  .sheet .body{overflow-y:auto;flex:1;min-height:0;}
+  /* 使用调休：滚动只作用于「选择抵扣的加班列表」，其余内容固定不动 */
+  .sheet .body.fixed{overflow:hidden;display:flex;flex-direction:column;}
+  .pick-scroll{flex:1;min-height:0;max-height:340px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  .field{margin-bottom:15px;}
+  .field label{display:block;font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:7px;}
+  .field input,.field textarea{
+    width:100%;border:1.5px solid var(--divider);border-radius:13px;padding:12px 14px;
+    font-size:15px;font-family:inherit;color:var(--text);background:#fafbfc;outline:none;
+  }
+  .field input:focus,.field textarea:focus{border-color:var(--primary);background:#fff;}
+  .field textarea{resize:none;min-height:64px;}
+  .row2{display:flex;gap:12px;}
+  .row2 .field{flex:1;}
+  .seg{display:flex;background:#f0f1f5;border-radius:13px;padding:4px;gap:4px;}
+  .seg button{
+    flex:1;border:none;background:transparent;padding:10px 6px;border-radius:10px;font-size:13px;
+    font-weight:700;color:var(--text-2);cursor:pointer;font-family:inherit;white-space:nowrap;
+  }
+  .seg button.on{background:#fff;color:var(--primary);box-shadow:var(--shadow-sm);}
+  .calc{
+    display:flex;align-items:center;justify-content:space-between;background:var(--primary-soft);
+    border-radius:13px;padding:12px 14px;margin-bottom:4px;
+  }
+  .calc .ck{font-size:13px;color:var(--primary-dark);font-weight:600;}
+  .calc .cv{font-size:20px;font-weight:800;color:var(--primary);}
+  .calc .cvrow{display:flex;align-items:center;gap:8px;}
+  /* 跨天标记：与主色同族的深蓝胶囊，白字保证对比度 */
+  .calc .xd{
+    flex:none;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.3px;
+    color:#fff;background:var(--primary-deep);box-shadow:0 3px 10px rgba(47,99,207,.28);
+  }
+  .calc .xd[hidden]{display:none;}
+  .hint.xday{margin-top:7px;padding:7px 10px;border-radius:10px;background:var(--primary-soft);color:var(--primary-dark);}
+  .hint.xday[hidden]{display:none;}
+  /* 有效加班时长：可手动输入 */
+  .calc.eff{background:#fff;border:1.5px solid #dbe4ff;margin-top:8px;}
+  .calc .cv-in{display:flex;align-items:center;gap:6px;}
+  /* Blink 的 <input> 垂直居中取「内容盒中心」，改 line-height 无效（实测 32/34/35/36/normal 位置完全相同）；
+     且内容盒含字体下伸留白，数字（无下伸部）会被压得偏下约 2px。
+     故改为固定高 38px + 不对称纵向 padding：底部 3px 把数字整体上移 1.5px，
+     使「3.0」在框内光学垂直居中（DPR 1/2/3 实测偏移均为 0.00px）。 */
+  .calc .cv-in input{
+    width:78px;height:38px;text-align:right;border:1.5px solid #b9ccff;border-radius:10px;
+    padding:0 9px 3px;font-size:17px;font-weight:800;color:var(--primary);
+    font-family:inherit;background:#fff;outline:none;
+  }
+  .calc .cv-in input:focus{border-color:var(--primary);}
+  .calc .cv-in .u{font-size:12px;color:var(--primary-dark);font-weight:700;}
+  .hint{font-size:11.5px;color:var(--text-3);line-height:1.55;margin:9px 2px 0;}
+  .sheet-actions{display:flex;gap:12px;flex:none;padding-top:14px;}
+  .btn{
+    flex:1;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;
+  }
+  .btn.ghost{background:#f0f1f5;color:var(--text-2);}
+  .btn.primary{background:linear-gradient(135deg,#5a95f7,var(--primary-strong));color:#fff;}
+  .btn:active{transform:scale(.98);}
+
+  /* ===== Pick list (使用调休 选择加班) ===== */
+  .pick-head{display:flex;align-items:center;justify-content:space-between;margin:2px 0 10px;}
+  .pick-head .pt{font-size:14px;font-weight:800;}
+  .pick-head .pa{font-size:12.5px;color:var(--text-2);font-weight:600;}
+  .pick-head .pa b{color:var(--green);}
+  .pick{
+    display:flex;align-items:center;gap:12px;border:1.5px solid var(--divider);border-radius:14px;
+    padding:11px 12px;margin-bottom:9px;cursor:pointer;transition:.15s;background:#fafbfc;
+  }
+  .pick.on{border-color:var(--primary);background:var(--primary-soft);}
+  .pick .cb{
+    width:21px;height:21px;border-radius:7px;border:2px solid #c8ccd8;flex:none;
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;
+  }
+  .pick.on .cb{background:var(--primary);border-color:var(--primary);}
+  .pick .pi{flex:1;min-width:0;}
+  .pick .pi .pd{font-size:14.5px;font-weight:700;}
+  .pick .pi .pd .wk{font-size:11.5px;color:var(--text-3);font-weight:600;margin-left:4px;}
+  .pick .pi .pr{font-size:12px;color:var(--text-2);margin-top:3px;}
+  .pick .pi .pr b{color:var(--green);font-weight:800;}
+  .pick .amt{
+    width:66px;flex:none;text-align:right;border:1.5px solid var(--divider);border-radius:10px;
+    padding:8px;font-size:14px;font-weight:800;color:var(--primary);font-family:inherit;
+    background:#fff;outline:none;
+  }
+  .pick.on .amt{border-color:#B9CCFF;}
+  .pick .amt:disabled{opacity:.4;}
+  .pick .unit{font-size:11.5px;color:var(--text-3);font-weight:700;}
+
+  /* realtime result */
+  .rt{display:flex;gap:10px;margin:4px 0 6px;}
+  .rt .rc{flex:1;background:var(--bg);border-radius:13px;padding:11px 12px;text-align:center;}
+  .rt .rc .rk{font-size:11.5px;color:var(--text-2);}
+  .rt .rc .rv{font-size:19px;font-weight:800;margin-top:3px;color:var(--primary);}
+  .rt .rc.after .rv{color:var(--green);}
+  .rt .rc.after.neg .rv{color:var(--red);}
+
+  /* ===== Toast ===== */
+  .toast{
+    position:absolute;left:50%;bottom:186px;transform:translateX(-50%) translateY(20px);
+    background:rgba(28,27,31,.92);color:#fff;padding:10px 18px;border-radius:22px;font-size:13.5px;
+    opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:88%;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ===== 自定义日期选择器（与记账原型完全一致：自绘日历 + 年/月下钻） ===== */
+  /* 日期选择触发框：与 .dd-trigger 同一套度量与状态反馈（悬停/聚焦/已填值） */
+  .date-input {
+    cursor: pointer; font-weight: 700; letter-spacing: .2px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a909c' stroke-width='1.9' stroke-linecap='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='3'/%3E%3Cpath d='M8 3.2v3.6M16 3.2v3.6M3.5 10h17'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 13px center; background-size: 16px 16px;
+    padding-right: 36px;
+    transition: border-color .16s, background-color .16s, box-shadow .16s;
+  }
+  /* 用 background-color 而非 background 简写：简写会把上面的 background-image（日历图标）一并清成 none，
+     导致悬停/聚焦瞬间图标消失。聚焦环/底色逻辑不变。 */
+  .date-input:hover { border-color: #cfd8ea; background-color: #fff; }
+  .date-input:focus { border-color: var(--primary); background-color: #fff; box-shadow: 0 0 0 3px rgba(76,139,245,.15); }
+  .date-input::placeholder { color: var(--text-3); font-weight: 600; }
+  .date-input:not([data-iso=""]) { color: var(--text); }
+  .dp-mask { position: absolute; inset: 0; background: rgba(15,23,42,.45); z-index: 60; display: none; align-items: center; justify-content: center; }
+  .dp-mask.show { display: flex; }
+  .dp-panel { width: 316px; background: var(--card); border-radius: 20px; box-shadow: var(--sh-lg); overflow: hidden; }
+  .dp-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px; background: linear-gradient(135deg, #5a95f7, #3a73e0); }
+  .dp-btn { width: 34px; height: 34px; border: none; background: transparent; color: #fff; font-size: 17px; line-height: 1; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .dp-btn:hover { background: rgba(255,255,255,.18); }
+  .dp-title { color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; padding: 6px 12px; border-radius: 10px; user-select: none; white-space: nowrap; }
+  .dp-title:hover { background: rgba(255,255,255,.18); }
+  .dp-week { display: grid; grid-template-columns: repeat(7,1fr); text-align: center; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 10px 10px 2px; }
+  .dp-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; padding: 4px 10px 10px; }
+  .dp-grid.cols3 { grid-template-columns: repeat(3,1fr); gap: 8px; padding: 12px 14px 14px; }
+  .dp-cell { height: 36px; border: none; background: transparent; border-radius: 50%; font-family: inherit; font-size: 13px; color: var(--text-1); cursor: pointer; transition: .15s; }
+  .dp-cell:hover { background: var(--primary-soft); }
+  .dp-cell.dim { color: var(--text-3); }
+  .dp-cell.sel { background: var(--primary); color: #fff; font-weight: 700; }
+  .dp-cell.today { box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .dp-cell.big { height: 50px; border-radius: 14px; font-size: 14px; }
+  .dp-foot { display: flex; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--divider); }
+  .dp-foot button { border: none; background: transparent; color: var(--primary); font-family: inherit; font-size: 14px; font-weight: 600; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+  .dp-foot button:hover { background: var(--primary-soft); }
+
+  .pages::-webkit-scrollbar,.sheet .body::-webkit-scrollbar,.pick-scroll::-webkit-scrollbar{width:0;}
+
+  @media (max-width:480px){
+    body{padding:0;background:#fff;}
+    .phone{width:100vw;height:100vh;height:100dvh;border-radius:0;box-shadow:none;}
+    .screen{border-radius:0;}
+  }
+
+  /* ============================================================
+     右侧「交互说明」面板（.spec）
+     ------------------------------------------------------------
+     仅用于原型交付评审：宽屏时与手机预览并排，窄屏（≤1180px）自动隐藏，
+     不影响小程序本体布局。视觉语言复用站内变量（卡片/圆角/主色/阴影）。
+     联动关系：
+       · 底部导航切页 → .spec-tab 与 .sp-page 同步切换；
+       · .spec-tab 点击 → 反向驱动手机切页（保持两侧一致）；
+       · 点击手机内任意带 data-spec 的元素 → 高亮右侧对应说明条目。
+     ============================================================ */
+  .spec{
+    width:624px;height:844px;flex:none;background:var(--card);
+    border-radius:24px;box-shadow:0 24px 60px rgba(24,39,75,.16), 0 0 0 1px rgba(24,39,75,.05);
+    display:flex;flex-direction:column;overflow:hidden;text-align:left;
+  }
+  /* ---- 头部：标题 + 页签 ---- */
+  .spec-head{flex:none;padding:18px 22px 14px;background:var(--card);border-bottom:1px solid var(--divider);}
+  .spec-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+  .spec-title{font-size:16px;font-weight:800;letter-spacing:.2px;color:var(--text);}
+  .spec-title small{display:block;margin-top:4px;font-size:11.5px;font-weight:500;color:var(--text-2);letter-spacing:0;line-height:1.5;}
+  .spec-badge{
+    flex:none;font-size:11px;font-weight:700;color:var(--primary-deep);background:var(--primary-soft);
+    border:1px solid #d8e5ff;border-radius:999px;padding:4px 10px;white-space:nowrap;
+  }
+  .spec-tabs{display:flex;gap:8px;margin-top:14px;}
+  .spec-tab{
+    flex:1;height:36px;border-radius:10px;border:1px solid var(--divider);background:#f7f9fc;
+    color:var(--text-2);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;
+    transition:background .16s,color .16s,border-color .16s,box-shadow .16s;
+  }
+  .spec-tab:hover{background:var(--primary-soft);color:var(--primary-deep);border-color:#d8e5ff;}
+  .spec-tab.on{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px rgba(76,139,245,.3);}
+  .spec-tab:focus-visible{outline:2px solid var(--primary-deep);outline-offset:2px;}
+  /* ---- 正文滚动区 ---- */
+  .spec-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px 28px;background:#fbfcfe;}
+  .spec-body::-webkit-scrollbar{width:8px;}
+  .spec-body::-webkit-scrollbar-thumb{background:#d9e0ec;border-radius:8px;}
+  .sp-page{display:none;}
+  .sp-page.on{display:block;}
+  /* ---- 分节 ---- */
+  .sp-sec{margin-bottom:18px;}
+  .sp-sec>h4{
+    margin:0 0 9px;font-size:13px;font-weight:800;color:var(--primary-deep);
+    display:flex;align-items:center;gap:7px;letter-spacing:.2px;
+  }
+  .sp-sec>h4 i{
+    display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none;
+    border-radius:6px;background:var(--primary-soft);color:var(--primary-deep);font-size:10.5px;font-style:normal;
+  }
+  .sp-sec>h4 em{margin-left:auto;font-style:normal;font-size:11px;font-weight:600;color:var(--text-3);}
+  /* ---- 核心流程（有序，圆形序号） ---- */
+  .sp-flow{margin:0;padding:0;list-style:none;counter-reset:spf;}
+  .sp-flow li{
+    position:relative;padding:0 0 9px 26px;font-size:12.5px;line-height:1.64;color:#4a5263;
+  }
+  .sp-flow li::before{
+    counter-increment:spf;content:counter(spf);
+    position:absolute;left:0;top:1px;width:17px;height:17px;border-radius:50%;
+    background:var(--primary);color:#fff;font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sp-flow b{color:var(--text);}
+  /* ---- 元素交互条目（可被高亮） ---- */
+  .sp-item{
+    background:#fff;border:1px solid var(--divider);border-radius:12px;
+    padding:10px 12px;margin-bottom:8px;transition:.22s;
+  }
+  .sp-item .sp-t{
+    font-size:12.5px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  }
+  .sp-item .sp-t em{
+    font-style:normal;font-size:10.5px;font-weight:700;color:var(--primary-deep);
+    background:var(--primary-soft);border-radius:5px;padding:1px 6px;
+  }
+  .sp-item .sp-t .sp-sel{
+    margin-left:auto;font-size:10.5px;font-weight:600;color:var(--text-3);
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .sp-item .sp-d{font-size:12px;line-height:1.68;color:#5a6273;margin-top:5px;}
+  .sp-item .sp-d b{color:var(--text);font-weight:700;}
+  .sp-item .sp-d .sp-li{display:block;position:relative;padding-left:13px;}
+  .sp-item .sp-d .sp-li::before{
+    content:"";position:absolute;left:3px;top:8px;width:4px;height:4px;border-radius:50%;background:#c3cbd8;
+  }
+  code{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;
+    background:#f2f5fa;border:1px solid #e6ebf3;border-radius:5px;padding:0 4px;color:#31405c;
+  }
+  /* 高亮态：由「点击手机内元素」触发 */
+  .sp-item.hl{border-color:var(--primary);background:var(--primary-soft);}
+  .sp-item.hl .sp-t{color:var(--primary-deep);}
+  .sp-item.hl .sp-t em{background:#dbe8ff;}
+  .sp-item.flash{animation:spFlash .8s ease;}
+  @keyframes spFlash{
+    0%{box-shadow:0 0 0 0 rgba(76,139,245,.42);}
+    100%{box-shadow:0 0 0 10px rgba(76,139,245,0);}
+  }
+  /* ---- 反馈/文案表 ---- */
+  .sp-table{
+    width:100%;border-collapse:separate;border-spacing:0;font-size:11.5px;background:#fff;
+    border:1px solid var(--divider);border-radius:12px;overflow:hidden;
+  }
+  .sp-table th{
+    background:#f4f7fc;color:var(--text-2);font-weight:700;text-align:left;padding:7px 10px;white-space:nowrap;
+  }
+  .sp-table td{padding:7px 10px;border-top:1px solid var(--divider);color:#5a6273;line-height:1.55;vertical-align:top;}
+  .sp-table td b{color:var(--text);}
+  .sp-table td:first-child{color:#4a5263;white-space:nowrap;}
+  /* ---- 异常与边界列表 ---- */
+  .sp-edge{margin:0;padding:0;list-style:none;}
+  .sp-edge li{
+    position:relative;padding:7px 0 7px 19px;font-size:12px;line-height:1.62;color:#5a6273;
+    border-bottom:1px dashed #e9eef6;
+  }
+  .sp-edge li:last-child{border-bottom:0;}
+  .sp-edge li::before{
+    content:"";position:absolute;left:4px;top:14px;width:6px;height:6px;border-radius:50%;background:var(--amber);
+  }
+  .sp-edge b{color:var(--text);}
+  /* ---- 手机侧联动：面板条目悬停/选中时，给手机内对应元素描边 ---- */
+  .spec-focus{outline:2px solid rgba(76,139,245,.95);outline-offset:2px;animation:spPulse 1.1s ease-in-out 3;}
+  @keyframes spPulse{
+    0%,100%{outline-color:rgba(76,139,245,.95);}
+    50%{outline-color:rgba(76,139,245,.25);}
+  }
+  /* 窄屏（容纳不下手机 + 面板）时隐藏面板，保持手机预览体验 */
+  @media (max-width:1180px){
+    body{gap:0;}
+    .spec{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="screen">
+    <!-- Status bar -->
+    <div class="statusbar">
+      <div id="clock">15:51</div>
+      <div class="right">
+        <svg width="18" height="12" viewBox="0 0 18 12"><g fill="#1c1b1f">
+          <rect x="0" y="8" width="3" height="4" rx="1"/>
+          <rect x="5" y="5.5" width="3" height="6.5" rx="1"/>
+          <rect x="10" y="3" width="3" height="9" rx="1"/>
+          <rect x="15" y="0.5" width="3" height="11.5" rx="1" opacity=".35"/>
+        </g></svg>
+        <svg width="17" height="13" viewBox="0 0 17 13"><g fill="none" stroke="#1c1b1f" stroke-width="1.6" stroke-linecap="round">
+          <path d="M1 4.2C4.6 1.2 12.4 1.2 16 4.2"/>
+          <path d="M3.4 6.7C6 4.6 11 4.6 13.6 6.7"/>
+          <path d="M5.8 9.1C7.1 8.1 9.9 8.1 11.2 9.1"/>
+        </g><circle cx="8.5" cy="11.4" r="1.4" fill="#1c1b1f"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13">
+          <rect x="0.5" y="0.5" width="22" height="12" rx="3.5" fill="none" stroke="#1c1b1f" stroke-opacity=".4"/>
+          <rect x="2.5" y="2.5" width="17" height="8" rx="2" fill="#1c1b1f"/>
+          <rect x="24" y="4" width="2.2" height="5" rx="1" fill="#1c1b1f" fill-opacity=".4"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- App bar -->
+    <div class="appbar">
+      <div class="title" id="appTitle">加班记录</div>
+    </div>
+
+    <!-- Pages -->
+    <div class="pages">
+      <!-- ===== 加班记录页 ===== -->
+      <div class="page active" id="page-records">
+        <div class="summary-row" data-spec="rec-summary">
+          <div class="sumcard"><div class="v" id="sumTotal">0<small> h</small></div><div class="k">累计加班</div></div>
+          <div class="sumcard alt"><div class="v" id="sumComp">0<small> h</small></div><div class="k">可调休加班</div></div>
+          <div class="sumcard amber"><div class="v" id="sumDays">0<small> 天</small></div><div class="k">折算调休</div></div>
+        </div>
+        <!-- 顶部汇总随下方「年-月」筛选实时重算，此说明行让统计口径可见 -->
+        <div class="sum-note" id="sumNote" hidden></div>
+        <div class="filter-bar" data-spec="rec-filter">
+          <div class="dd fyear" id="fyWrap">
+            <button class="dd-trigger" id="fltYearBtn" type="button" aria-haspopup="listbox" aria-label="按年份筛选加班记录">
+              <span class="dd-val" id="fltYearVal">全部年份</span>
+              <svg class="dd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+          </div>
+          <div class="dd" id="fmWrap">
+            <button class="dd-trigger" id="fltMonthBtn" type="button" aria-haspopup="listbox" aria-label="按月份筛选加班记录">
+              <span class="dd-val" id="fltMonthVal">全部月份</span>
+              <svg class="dd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+          </div>
+          <button class="freset" id="fltReset" type="button" aria-label="重置筛选" hidden>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <div class="sec-title">加班明细 <span class="count" id="recCount"></span></div>
+        <div id="recList" data-spec="rec-list"></div>
+      </div>
+
+      <!-- ===== 时长统计页 ===== -->
+      <div class="page" id="page-stats">
+        <!-- 时间区间选择器：全部 / 去年 / 今年 / 时间（选中「时间」展开自定义起止日期） -->
+        <div class="rng-bar">
+          <div class="rng-seg" id="rngSeg" data-spec="st-range" role="tablist" aria-label="选择统计时间区间">
+            <button class="rng-opt" type="button" role="tab" data-rng="all" aria-selected="true">全部</button>
+            <button class="rng-opt" type="button" role="tab" data-rng="last" aria-selected="false">去年</button>
+            <button class="rng-opt" type="button" role="tab" data-rng="year" aria-selected="false">今年</button>
+            <button class="rng-opt" type="button" role="tab" data-rng="time" aria-selected="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3.2v3.6M16 3.2v3.6M3.5 10h17"/></svg>时间
+            </button>
+          </div>
+          <div class="rng-custom" id="rngCustom" data-spec="st-range-custom" aria-hidden="true">
+            <input type="text" class="date-input rng-date" id="rngStart" readonly placeholder="开始日期" data-iso="" aria-label="统计开始日期">
+            <span class="rng-sep">至</span>
+            <input type="text" class="date-input rng-date" id="rngEnd" readonly placeholder="结束日期" data-iso="" aria-label="统计结束日期">
+            <button class="rng-clear" id="rngClear" type="button">清除</button>
+          </div>
+          <div class="rng-note" id="rngNote" hidden></div>
+        </div>
+
+        <div class="stat-card" data-spec="st-donut">
+          <h3>调休额度构成</h3>
+          <div class="donut-wrap">
+            <div class="donut" id="donut">
+              <div class="center">
+                <div class="big" id="donutBig">0</div>
+                <div class="lbl">可用天数</div>
+              </div>
+            </div>
+            <div class="legend">
+              <div class="item">
+                <span class="dot" style="background:var(--green)"></span>
+                <span class="lk">可用调休</span>
+                <span class="lv" id="lgAv">0h</span>
+              </div>
+              <div class="item">
+                <span class="dot" style="background:var(--primary)"></span>
+                <span class="lk">已使用</span>
+                <span class="lv" id="lgUs">0h</span>
+              </div>
+              <div class="item">
+                <span class="dot" style="background:var(--red)"></span>
+                <span class="lk">已过期</span>
+                <span class="lv" id="lgEx">0h</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card" data-spec="st-overview">
+          <h3>时长概览</h3>
+          <div class="bigstat">
+            <div class="b"><div class="v" id="stTotal">0<small> h</small></div><div class="k">累计加班时长</div></div>
+            <div class="b g"><div class="v" id="stComp">0<small> h</small></div><div class="k">可调休加班时长</div></div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="bigstat">
+            <div class="b n"><div class="v" id="stPr">0<small> h</small></div><div class="k">攻关加班时长</div></div>
+            <div class="b a"><div class="v" id="stHoliday">0<small> h</small></div><div class="k">法定节假日加班时长</div></div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="bigstat">
+            <div class="b g"><div class="v" id="stDays">0<small> 天</small></div><div class="k">折算调休天数（可调休时长 ÷ 8）</div></div>
+          </div>
+        </div>
+        <div class="data-io">
+          <button class="btn outline io-btn" id="btnImport" data-spec="st-import" type="button" aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="M8.2 9.4 12 13.2l3.8-3.8"/><path d="M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg>
+            数据导入
+          </button>
+          <button class="btn primary io-btn" id="btnExport" data-spec="st-export" type="button" aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13.2V3.2"/><path d="M8.2 7 12 3.2 15.8 7"/><path d="M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg>
+            数据导出
+          </button>
+        </div>
+        <div class="stat-card rule-card" data-spec="st-rule">
+          <h3>调休有效期规则</h3>
+          <div class="rule-item">
+            <span class="rule-tag">2026 年 10 月之前</span>
+            <div class="rule-txt">此阶段的加班时长，有效期统一至<b>次年 3 月 31 日</b>（按加班所在自然年顺延）。<span class="eg">例：2026-09-19 的加班 → 有效至 2027-03-31；2025-09-10 的加班 → 有效至 2026-03-31（已过期）</span></div>
+          </div>
+          <div class="rule-item">
+            <span class="rule-tag alt">2026 年 10 月及之后</span>
+            <div class="rule-txt">此阶段的加班时长，有效期至<b>下一自然季度末</b>：先定位加班所在自然季度，再顺延一个季度，取该季度最后一天（03-31 / 06-30 / 09-30 / 12-31）。<span class="eg">例：2026-10-15 属 Q4 → 有效至 2027-03-31；2027-01-10 属 Q1 → 有效至 2027-06-30；2027-04-01 属 Q2 → 有效至 2027-09-30</span></div>
+          </div>
+          <div class="rule-item">
+            <span class="rule-tag plain">通用口径</span>
+            <div class="rule-txt">有效期<b>含截止日当天</b>；截止日之后仍未抵扣的剩余时长计入「已过期」，不再参与调休抵扣。两档规则在 9/10 月交界处衔接连续（2026-09-30 与 2026-10-01 的加班均有效至 2027-03-31）。每笔可调休加班的截止日已在「加班记录」明细中逐条标注。<span class="eg">「已过期」仅统计「剩余未抵扣」的时长；已抵扣部分计入「已使用」，不受有效期影响。</span></div>
+          </div>
+          <div class="rule-foot">累计加班时长 = 所有记录「有效加班时长」之和<br>可调休加班时长 = 所有「可调休」记录的有效加班时长之和 · 折算调休天数 = 可调休时长 ÷ 8</div>
+        </div>
+        <div class="app-version" id="appVersion">拾时簿 GleanTime <b>v1.0</b></div>
+      </div>
+
+      <!-- ===== 调休记录页 ===== -->
+      <div class="page" id="page-leaves">
+        <div class="summary-row" data-spec="lv-summary">
+          <div class="sumcard alt"><div class="v" id="lvAv">0<small> h</small></div><div class="k">可用</div></div>
+          <div class="sumcard"><div class="v" id="lvUs">0<small> h</small></div><div class="k">已使用</div></div>
+          <div class="sumcard red"><div class="v" id="lvEx">0<small> h</small></div><div class="k">已过期</div></div>
+        </div>
+        <div class="filter-bar" data-spec="lv-filter">
+          <div class="dd fyear" id="lyWrap">
+            <button class="dd-trigger" id="lvYearBtn" type="button" aria-haspopup="listbox" aria-label="按年份筛选调休记录">
+              <span class="dd-val" id="lvYearVal">全部年份</span>
+              <svg class="dd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+          </div>
+          <div class="dd" id="lmWrap">
+            <button class="dd-trigger" id="lvMonthBtn" type="button" aria-haspopup="listbox" aria-label="按月份筛选调休记录">
+              <span class="dd-val" id="lvMonthVal">全部月份</span>
+              <svg class="dd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+          </div>
+          <button class="freset" id="lvReset" type="button" aria-label="重置调休筛选" hidden>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
+        </div>
+        <div class="sec-title">调休使用记录 <span class="count" id="lvCount"></span></div>
+        <div id="leaveList" data-spec="lv-list"></div>
+      </div>
+    </div>
+
+    <!-- FAB（纯图标圆形按钮，与记账原型一致） -->
+    <div class="fab" id="fab" data-spec="fab" title="添加加班">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+
+    <!-- Bottom navigation -->
+    <div class="bottomnav">
+      <div class="navitem active" data-tab="records">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <span class="lbl">加班记录</span>
+      </div>
+      <div class="navitem" data-tab="leaves">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4M9.5 14l2 2 3.5-4"/></svg>
+        <span class="lbl">调休记录</span>
+      </div>
+      <div class="navitem" data-tab="stats">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span class="lbl">时长统计</span>
+      </div>
+    </div>
+
+    <!-- System nav -->
+    <div class="sysnav">
+      <button class="sys-back" id="sysBack" type="button" aria-label="返回">‹</button>
+      <span class="sys-home" id="sysHome"></span>
+      <span class="sys-recent" id="sysRecent"></span>
+    </div>
+
+    <!-- Scrim -->
+    <div class="scrim" id="scrim"></div>
+
+    <!-- Sheet 1: 添加加班 -->
+    <div class="sheet" id="sheet-add" data-spec="sheet-add">
+      <div class="grab"></div>
+      <h2>添加加班记录</h2>
+      <div class="sub">填写加班信息，时长将根据起止时间自动计算</div>
+      <div class="body">
+        <div class="field">
+          <label>加班日期</label>
+          <input type="text" class="date-input" id="fDate" data-spec="sheet-add-date" readonly placeholder="yyyy/mm/dd" data-iso="">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>起始时间</label>
+            <div class="dd" id="ddStart">
+              <input type="hidden" id="fStart" value="18:30">
+              <button class="dd-trigger" id="fStartBtn" data-spec="sheet-add-time" type="button" aria-haspopup="listbox" aria-label="选择起始时间">
+                <svg class="dd-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.4V12l3 1.9"/></svg>
+                <span class="dd-val" id="fStartVal">18:30</span>
+                <svg class="dd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label>结束时间</label>
+            <div class="dd" id="ddEnd">
+              <input type="hidden" id="fEnd" value="21:30">
+              <button class="dd-trigger" id="fEndBtn" data-spec="sheet-add-time" type="button" aria-haspopup="listbox" aria-label="选择结束时间">
+                <svg class="dd-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.4V12l3 1.9"/></svg>
+                <span class="dd-val" id="fEndVal">21:30</span>
+                <svg class="dd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>加班原因</label>
+          <textarea id="fReason" placeholder="如：版本发布值守、客户需求支持..."></textarea>
+        </div>
+        <div class="field">
+          <label>加班类型</label>
+          <div class="seg" id="fType" data-spec="sheet-add-type">
+            <button type="button" class="on" data-v="comp">可调休</button>
+            <button type="button" data-v="pr">攻关</button>
+            <button type="button" data-v="holiday">法定节假日</button>
+          </div>
+        </div>
+        <div class="calc">
+          <span class="ck">本次加班时长</span>
+          <span class="cvrow">
+            <span class="cv" id="fDur">0.0 小时</span>
+            <span class="xd" id="fXday" hidden>跨天</span>
+          </span>
+        </div>
+        <div class="hint xday" id="fXdayHint" hidden></div>
+        <div class="calc eff">
+          <span class="ck">有效加班时长</span>
+          <span class="cv-in" data-spec="sheet-add-valid"><input type="text" inputmode="decimal" id="fValid" value="0.0"><span class="u">小时</span></span>
+        </div>
+        <div class="hint">默认等于本次加班时长，可手动修改（如扣除用餐/休息）。累计加班按「有效加班时长」统计，「可调休」类型才计入调休额度。</div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" id="btnCancel">取消</button>
+        <button class="btn primary" id="btnSave" data-spec="sheet-add-save">保存记录</button>
+      </div>
+    </div>
+
+    <!-- Sheet 2: 使用调休 -->
+    <div class="sheet" id="sheet-leave" data-spec="sheet-leave">
+      <div class="grab"></div>
+      <h2>使用调休</h2>
+      <div class="sub">选择使用调休的日期，并从下方「可调休且仍有剩余」的加班中勾选要抵扣的时长</div>
+      <div class="body fixed">
+        <div class="field">
+          <label>调休使用日期</label>
+          <input type="text" class="date-input" id="lvDate" data-spec="sheet-leave-date" readonly placeholder="yyyy/mm/dd" data-iso="">
+        </div>
+        <div class="pick-head">
+          <span class="pt">选择抵扣的加班</span>
+          <span class="pa">可用 <b id="pkAvail">0h</b></span>
+        </div>
+        <div class="pick-scroll" data-spec="sheet-leave-pick"><div id="pickList"></div></div>
+        <div class="rt" data-spec="sheet-leave-rt">
+          <div class="rc"><div class="rk">本次抵扣</div><div class="rv" id="rtUse">0.0h</div></div>
+          <div class="rc after" id="rtAfterCard"><div class="rk">抵扣后可用</div><div class="rv" id="rtAfter">0.0h</div></div>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" id="lvCancel">取消</button>
+        <button class="btn primary" id="lvSave" data-spec="sheet-leave-save">确认抵扣</button>
+      </div>
+    </div>
+
+    <!-- Sheet 3: 数据导入（步骤①选来源 → 步骤②微信聊天文件列表） -->
+    <div class="sheet" id="sheet-import" data-spec="st-import-sheet">
+      <div class="grab"></div>
+      <div class="io-sheet-head">
+        <button class="io-back" id="impBack" type="button" hidden aria-label="返回">‹</button>
+        <h2 id="impTitle">导入数据</h2>
+      </div>
+      <div class="sub" id="impSub">选择数据来源；导入后按记录 ID 合并去重（同 ID 覆盖，新 ID 追加）</div>
+      <div class="body">
+        <div id="impStep1">
+          <button class="io-pick" id="impLocal" type="button">
+            <span class="io-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
+            <span class="io-txt"><b>从本地文件选择</b><i>从手机 / 电脑的文件管理器中选择 .json 备份</i></span>
+            <span class="io-arrow">›</span>
+          </button>
+          <button class="io-pick" id="impWechat" type="button">
+            <span class="io-ico wx"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.3 3.6C5.4 3.6 2.3 6.1 2.3 9.2c0 1.7.9 3.3 2.4 4.3l-.7 2.1 2.5-1.3c.5.1 1.1.2 1.7.3-.1-.4-.2-.9-.2-1.3 0-2.9 2.8-5.2 6.2-5.2h.4c-.7-2.2-3.2-3.8-6.2-3.8Zm-2.5 3.1a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Zm5 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z"/><path d="M21.7 13.3c0-2.5-2.5-4.5-5.6-4.5s-5.6 2-5.6 4.5 2.5 4.5 5.6 4.5c.6 0 1.2-.1 1.8-.2l1.9.9-.5-1.7c1.5-.8 2.4-2.1 2.4-3.5Zm-7.4-1.6a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm3.6 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z"/></svg></span>
+            <span class="io-txt"><b>从微信聊天文件选择</b><i>从聊天记录中选择（文件传输助手 / 同事发来的 .json）</i></span>
+            <span class="io-arrow">›</span>
+          </button>
+          <input type="file" id="impFile" accept=".json,application/json" hidden>
+          <div class="io-tip">支持本小程序导出的 JSON 备份（含 schemaVersion 字段）。导入只做合并，不会删除你已有的记录。</div>
+        </div>
+        <div id="impStep2" hidden>
+          <div id="wxfList"></div>
+          <div class="io-tip">原型演示：左侧为聊天中可选的备份文件，点击即按合并规则导入。真机环境下此步将调用 <b>wx.chooseMessageFile</b> 唤起微信的聊天文件选择器。</div>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" id="impCancel" type="button">取消</button>
+      </div>
+    </div>
+
+    <!-- Sheet 4: 数据导出（步骤①选去向 → 步骤②选择微信联系人） -->
+    <div class="sheet" id="sheet-export" data-spec="st-export-sheet">
+      <div class="grab"></div>
+      <div class="io-sheet-head">
+        <button class="io-back" id="expBack" type="button" hidden aria-label="返回">‹</button>
+        <h2 id="expTitle">导出完成</h2>
+      </div>
+      <div class="sub" id="expSub">备份已生成，请选择下一步操作</div>
+      <div class="body">
+        <div id="expStep1">
+          <div class="io-sum">
+            <span class="io-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6.5 9.5 17 4 11.5"/></svg></span>
+            <span class="io-st"><b id="expFile">overtime_records.json</b><i id="expMeta">0 条记录</i></span>
+          </div>
+          <button class="io-pick" id="expLocal" type="button">
+            <span class="io-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10"/><path d="M8.2 9.4 12 13.2l3.8-3.8"/><path d="M4 16.5v2A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-2"/></svg></span>
+            <span class="io-txt"><b>保存到本地</b><i>下载 .json 文件到设备，可自行长期备份</i></span>
+            <span class="io-arrow">›</span>
+          </button>
+          <button class="io-pick" id="expWechat" type="button">
+            <span class="io-ico wx"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.3 3.6C5.4 3.6 2.3 6.1 2.3 9.2c0 1.7.9 3.3 2.4 4.3l-.7 2.1 2.5-1.3c.5.1 1.1.2 1.7.3-.1-.4-.2-.9-.2-1.3 0-2.9 2.8-5.2 6.2-5.2h.4c-.7-2.2-3.2-3.8-6.2-3.8Zm-2.5 3.1a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Zm5 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z"/><path d="M21.7 13.3c0-2.5-2.5-4.5-5.6-4.5s-5.6 2-5.6 4.5 2.5 4.5 5.6 4.5c.6 0 1.2-.1 1.8-.2l1.9.9-.5-1.7c1.5-.8 2.4-2.1 2.4-3.5Zm-7.4-1.6a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm3.6 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z"/></svg></span>
+            <span class="io-txt"><b>发送给微信好友</b><i>把备份文件发给好友、群或文件传输助手</i></span>
+            <span class="io-arrow">›</span>
+          </button>
+          <button class="io-pick" id="expCopy" type="button">
+            <span class="io-ico doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.5"/></svg></span>
+            <span class="io-txt"><b>复制为文本</b><i>复制 JSON 文本，可粘贴进微信收藏或备忘</i></span>
+            <span class="io-arrow">›</span>
+          </button>
+        </div>
+        <div id="expStep2" hidden>
+          <div id="wxFriendList"></div>
+          <div class="io-tip">原型演示：点击任一联系人即模拟发送文件。真机环境下此步将调用 <b>wx.shareFileMessage</b>（前需用 FileSystemManager 写入临时文件）。</div>
+        </div>
+        <div id="expStep3" hidden>
+          <textarea class="io-raw" id="expRaw" readonly spellcheck="false"></textarea>
+          <div style="height:10px"></div>
+          <button class="btn primary" id="expRetryCopy" type="button">全选并复制</button>
+          <div class="io-tip">自动复制被浏览器拦截：点一下文本框即可全选，随后按 Ctrl / Cmd + C 复制；或点上方按钮重试。</div>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" id="expCancel" type="button">关闭</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     右侧「小程序交互说明」面板（原型预览专用，窄屏 ≤1180px 自动隐藏）
+     · 按页面划分：与底部导航页签一一对应（加班记录 / 时长统计 / 调休记录）
+     · 每页五节：核心用户操作流程 / 界面元素交互行为 / 状态切换 / 操作反馈 / 异常与边界情况
+     · 点击左侧手机界面中的任意功能元素，右侧自动定位并高亮其对应的说明条目
+     ============================================================ -->
+<aside class="spec" id="spec">
+  <div class="spec-head">
+    <div class="spec-hd">
+      <div class="spec-title">小程序交互说明
+        <small>点击左侧界面元素 → 右侧自动高亮对应说明；点击上方页签切换页面。</small>
+      </div>
+      <div class="spec-badge">开发参考 · 加班记录 v3</div>
+    </div>
+    <div class="spec-tabs" id="specTabs">
+      <button class="spec-tab on" type="button" data-page="records">加班记录</button>
+      <button class="spec-tab" type="button" data-page="leaves">调休记录</button>
+      <button class="spec-tab" type="button" data-page="stats">时长统计</button>
+    </div>
+  </div>
+
+  <div class="spec-body" id="specBody">
+
+    <!-- ===================== 页 1 · 加班记录 ===================== -->
+    <section class="sp-page on" data-page="records">
+
+      <div class="sp-sec">
+        <h4><i>1</i>核心用户操作流程<em>添加 / 修改 / 删除 / 筛选</em></h4>
+        <ol class="sp-flow">
+          <li>启动后默认停在<b>「加班记录」</b>页：顶部三张汇总卡展示「累计加班 / 可调休加班 / 折算调休天数」，下方明细列表按<b>加班日期倒序</b>排列。</li>
+          <li>点击右下角<b>圆形「＋」按钮</b>，自底部弹出「添加加班记录」弹层。默认值：日期＝今天、起始 18:30、结束 21:30、类型＝可调休、有效时长＝按起止时间自动算得的加班时长。</li>
+          <li>依次完成：<b>加班日期</b>（点输入框唤起自绘日历）→ <b>起止时间</b>（唤起时／分双列滚动下拉）→ <b>加班原因</b>（选填）→ <b>加班类型</b>（可调休／攻关／法定节假日）→ 按需修正<b>有效加班时长</b>。</li>
+          <li>点击<b>「保存记录」</b>：校验通过 → 追加记录 → 弹层收起 → 列表与三张汇总卡<b>即时重算</b> → 底部 toast 反馈「已添加 …」。</li>
+          <li><b>修改</b>：列表项<b>向左滑动</b>露出「修改 / 删除」→ 点<b>「修改」</b> → 弹层切为编辑态（标题「修改加班记录」、按钮「保存修改」）并<b>预填原值</b> → 保存为<b>原地更新</b>（保留原 id 与已发生的调休抵扣）。</li>
+          <li><b>删除</b>：同一路径点<b>「删除」</b> → 记录<b>立即移除</b>并刷新列表与汇总 → toast「已删除加班记录」。<b>无二次确认</b>；滑动本身绝不触发删除。</li>
+          <li><b>筛选</b>：点「全部年份 / 全部月份」下拉选择 → 明细列表<b>与顶部汇总同时收敛</b>到该区间，并出现「重置」按钮；点重置回到全部。</li>
+        </ol>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>2</i>界面元素交互行为<em>点击左侧对应元素可定位</em></h4>
+
+        <div class="sp-item" data-spec="rec-summary">
+          <div class="sp-t">顶部汇总卡 <em>实时重算</em><span class="sp-sel">.summary-row</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>累计加班</b>＝Σ 命中记录的「有效加班时长」；<b>可调休加班</b>＝Σ 类型为「可调休」的有效时长；<b>折算调休</b>＝可调休时长 ÷ 8（保留 1 位小数，单位「天」）。</span>
+            <span class="sp-li">三张卡随<b>年-月筛选实时重算</b>，与下方列表口径严格一致；筛选生效时列表上方出现说明行「已按所选时间区间实时统计（命中 N 条加班记录）」。</span>
+            <span class="sp-li">数值格式统一为<b>最多 2 位小数</b>（如 40.57 / 3.0），单位「h」以更小字号跟随主数值。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="rec-filter">
+          <div class="sp-t">年 / 月筛选 <em>两级联动</em><span class="sp-sel">#fltYearBtn #fltMonthBtn</span></div>
+          <div class="sp-d">
+            <span class="sp-li">年份选项由<b>当前数据派生</b>（倒序，新的在前），首项固定为「全部年份」；月份选项<b>随年份联动</b>，只列出该年确实存在数据的月份。</span>
+            <span class="sp-li">点击触发器展开自绘下拉面板：宽度对齐触发器、下方空间不足时<b>自动向上翻转</b>，支持键盘 ↑↓ 移动、Enter 选中、Esc 关闭。</span>
+            <span class="sp-li">年或月任一不为「全部」时，右侧出现<b>「重置」按钮</b>，点击把年、月同时复位为「全部」。</span>
+            <span class="sp-li"><b>切换年份不清空月份</b>：若原月份在新年份无数据，列表显示空态提示，由用户手动换月。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="rec-list">
+          <div class="sp-t">加班明细列表 <em>左滑手势</em><span class="sp-sel">#recList</span></div>
+          <div class="sp-d">
+            <span class="sp-li">每条记录展示：<b>日期 · 星期</b>、本次加班时长、<b>起止时间区间</b>（跨天显示「次日」）、有效加班时长、加班原因与状态标签；可调休记录额外标注<b>剩余可抵扣时长</b>与<b>有效期截止日</b>。</span>
+            <span class="sp-li"><b>左滑</b>：横向拖动时卡片跟随手指左移，最多露出 <b>152px（两个 76px 动作按钮）</b>。进入滑动态的判定为「水平位移 &gt; 6px 且大于垂直位移」；松手时位移 ≥76px 保持展开，否则回弹收起。</span>
+            <span class="sp-li"><b>点击已展开的卡片</b>即收起；滑动结束后 <b>400ms 内屏蔽浏览器补发的 click</b>，避免「一滑就删」。</span>
+            <span class="sp-li">同一时刻<b>只允许展开一行</b>：滑开新行会收起其他行；切换页签、打开弹层同样收起全部行。</span>
+            <span class="sp-li">拖拽过程中容器随露出状态切换底色，保证卡片圆角处不出现异色渗边。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="rec-row-edit">
+          <div class="sp-t">「修改」按钮 <em>蓝色 · 左位</em><span class="sp-sel">.swipe-action.edit</span></div>
+          <div class="sp-d">
+            <span class="sp-li">仅当<b>该行已滑出</b>（容器带 <code>.is-open</code>）时点击才生效；未滑出时点击无效——滑动只负责露出按钮，不承载任何业务动作。</span>
+            <span class="sp-li">点击后打开添加弹层并切换为<b>编辑态</b>：标题「修改加班记录」、副标题「修改加班信息，时长将根据起止时间自动计算」、主按钮「保存修改」，且表单预填该记录的日期 / 起止时间 / 原因 / 类型 / 有效时长。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="rec-row-del">
+          <div class="sp-t">「删除」按钮 <em>红色 · 右位</em><span class="sp-sel">.swipe-action.del</span></div>
+          <div class="sp-d">
+            <span class="sp-li">同样要求该行已滑出；点击后<b>直接删除</b>（无二次确认），移除该 id 的记录并持久化、刷新全部页面与统计。</span>
+            <span class="sp-li">删除一条<b>已有调休抵扣</b>的可调休记录时，其 <code>deductions</code> 一并移除：相应调休事件在「调休记录」页同步消失或金额减少，「可用」额度随之回涨。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="rec-deduct">
+          <div class="sp-t">调休抵扣标注 <em>只读</em><span class="sp-sel">.deduct-box</span></div>
+          <div class="sp-d">
+            <span class="sp-li">仅当记录类型为「可调休」且 <code>deductions</code> 非空时渲染：逐行列出「用于抵扣 <b>某日 · 星期</b> 调休：<b>X.Xh</b>」，区块右上角显示该笔<b>剩余可抵扣</b>。</span>
+            <span class="sp-li">此区块为<b>纯展示、不响应点击</b>；如需调整抵扣，请到「调休记录」页对该笔调休执行「修改」。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="fab">
+          <div class="sp-t">悬浮按钮 FAB <em>＋</em><span class="sp-sel">#fab</span></div>
+          <div class="sp-d">
+            <span class="sp-li">圆形主色按钮，固定于右下角、位于底部导航之上。<b>本页点击＝添加加班</b>（打开添加弹层）；在「调休记录」页点击＝使用调休（打开抵扣弹层）；在「时长统计」页<b>自动隐藏</b>。</span>
+            <span class="sp-li">纯图标按钮、无内联文字，仅通过 <code>title</code> 提供悬浮提示（添加加班 / 使用调休）。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-add">
+          <div class="sp-t">添加 / 修改加班弹层 <em>Bottom Sheet</em><span class="sp-sel">#sheet-add</span></div>
+          <div class="sp-d">
+            <span class="sp-li">自底部滑入，背后压一层半透明遮罩。<b>点「取消」或点遮罩区均关闭</b>；关闭不做保存、已填内容丢弃；下次以「添加」打开时表单<b>完全重置</b>为默认值。</span>
+            <span class="sp-li">每次打开前会先收起所有已滑出的列表行与已展开的下拉面板，避免状态残留。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-add-date">
+          <div class="sp-t">加班日期 <em>自绘日历</em><span class="sp-sel">#fDate</span></div>
+          <div class="sp-d">
+            <span class="sp-li">输入框<b>只读</b>、不弹系统键盘；点击唤起自绘日历面板，支持<b>年 / 月 / 日三级下钻</b>与上/下月、上/下年翻页，底部提供<b>「清除」「今天」</b>。选中后写回输入框，格式 <code>yyyy/mm/dd</code>。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-add-time">
+          <div class="sp-t">起止时间 <em>时 / 分双列</em><span class="sp-sel">#fStartBtn #fEndBtn</span></div>
+          <div class="sp-d">
+            <span class="sp-li">点击展开<b>小时 ＋ 分钟双列滚动面板</b>（不预选，滚动到当前值附近）；两列都选定后回填并关闭，Esc 或点击别处关闭。</span>
+            <span class="sp-li">时间写入隐藏字段后<b>立即重算「本次加班时长」</b>＝结束 − 起始（精确到分钟，按小时显示、最多 2 位小数）。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-add-type">
+          <div class="sp-t">加班类型 <em>三选一</em><span class="sp-sel">#fType</span></div>
+          <div class="sp-d">
+            <span class="sp-li">分段按钮，默认选中<b>「可调休」</b>，单选互斥、点击即切换。</span>
+            <span class="sp-li">影响面：只有<b>「可调休」</b>才计入调休额度、才出现在「使用调休」的可选清单、才显示有效期与抵扣标注；「攻关」「法定节假日」仅计入时长统计。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-add-valid">
+          <div class="sp-t">有效加班时长 <em>可编辑</em><span class="sp-sel">#fValid</span></div>
+          <div class="sp-d">
+            <span class="sp-li">默认<b>跟随起止时间自动计算</b>（自动态下改时间会同步刷新）；用户一旦手动输入即进入「手工态」，此后<b>不再被自动覆盖</b>。</span>
+            <span class="sp-li">失焦时规范化显示：整数补 1 位小数（3 → 3.0），其余保持最多 2 位。</span>
+            <span class="sp-li">用于扣除用餐／休息等不计入的时间。所有统计口径（累计加班、可调休、折算天数）均以<b>有效时长</b>为准。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-add-save">
+          <div class="sp-t">「保存记录 / 保存修改」 <em>主操作</em><span class="sp-sel">#btnSave</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>添加态</b>：校验 → 生成新 id（＝现有最大 id ＋ 1）→ 追加 → 关闭弹层 → 刷新 → toast「已添加 可调休 · 加班 3.0h / 有效 3.0h」。</span>
+            <span class="sp-li"><b>编辑态</b>：原地更新（保留 id 与 <code>deductions</code>）→ 关闭弹层 → 刷新 → toast「已更新加班记录 · 加班 X.Xh / 有效 X.Xh」。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>3</i>状态切换</h4>
+        <table class="sp-table">
+          <tr><th>对象</th><th>状态</th><th>切换条件与表现</th></tr>
+          <tr><td>列表行</td><td>闭合 / 拖拽中 / 展开</td><td>拖拽中容器加 <code>.revealing</code>（动作区保持绘制）；展开加 <code>.is-open</code>，判定阈值 76px；纯点击已展开行 → 收起。</td></tr>
+          <tr><td>弹层</td><td>添加态 / 编辑态</td><td>由 <code>editingId</code> 是否为空决定标题、副标题与主按钮文案；保存或取消后复位为 null。</td></tr>
+          <tr><td>筛选</td><td>未筛选 / 已筛选</td><td>年或月 ≠ 全部时：显示「重置」按钮与汇总说明行，计数文案变为「共 N 条（全部 M 条）」。</td></tr>
+          <tr><td>记录标签</td><td>可用 / 已使用 / 已过期 / 攻关 / 法定节假日</td><td>可调休记录按「剩余 &gt; 0 且未过期 → 可用」「剩余 ≤ 0 → 已使用」「剩余 &gt; 0 但已过期 → 已过期」判定；另两类直接显示类型名。</td></tr>
+          <tr><td>FAB</td><td>显示 / 隐藏</td><td>本页与调休页显示（提示文案不同），时长统计页隐藏。</td></tr>
+        </table>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>4</i>操作反馈<em>底部 toast</em></h4>
+        <table class="sp-table">
+          <tr><th>触发</th><th>反馈文案</th></tr>
+          <tr><td>添加成功</td><td><b>已添加 可调休 · 加班 3.0h / 有效 3.0h</b>（类型随所选切换）</td></tr>
+          <tr><td>修改成功</td><td><b>已更新加班记录 · 加班 X.Xh / 有效 X.Xh</b></td></tr>
+          <tr><td>删除成功</td><td><b>已删除加班记录</b></td></tr>
+          <tr><td>未选日期</td><td><b>请选择加班日期</b>（弹层保持打开，已填内容保留）</td></tr>
+          <tr><td>缺起止时间</td><td><b>请填写起止时间</b>（弹层保持打开）</td></tr>
+          <tr><td>编辑时有效时长不足</td><td><b>有效时长已自动调整为已抵扣的 X.Xh</b></td></tr>
+        </table>
+        <div class="sp-item" style="margin-top:8px">
+          <div class="sp-d">
+            <span class="sp-li">所有提示为<b>页面底部居中浮层</b>，<b>1.9s 后自动消失</b>；连续触发复用同一节点并重置计时，不堆叠。</span>
+            <span class="sp-li">保存、删除等<b>改写数据的操作</b>必须至少给出一条 toast，保证用户能确认动作已生效。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>5</i>异常与边界情况</h4>
+        <ul class="sp-edge">
+          <li><b>跨天加班</b>：结束时间 ≤ 起始时间时按<b>次日</b>计算（22:00 → 02:00 ＝ 4h）。弹层出现「跨天」角标与提示行，列表时间区间显示为「22:00 — 次日 02:00」。</li>
+          <li><b>有效时长大于本次时长</b>：保存时自动<b>截断为本次加班时长</b>，保证「有效 ≤ 本次」。</li>
+          <li><b>编辑时有效时长小于已抵扣</b>：自动上调至已抵扣值并 toast，避免产生「负剩余」。</li>
+          <li><b>起止时间缺失</b>：保存前拦截并 toast，弹层不关闭、已填内容保留。</li>
+          <li><b>无任何记录</b>：列表显示空态「暂无加班记录 / 点击右下角「＋」添加加班」，计数留空。</li>
+          <li><b>筛选无命中</b>：显示「该年月暂无加班记录 / 试试切换其他年份或月份」，计数显示「共 0 条（全部 N 条）」。</li>
+          <li><b>删除后 id 不回收</b>：新增记录取「现有最大 id ＋ 1」，已删除的 id 不复用，避免与历史备份做导入合并时冲突。</li>
+          <li><b>原因留空</b>：落库为「未填写原因」而非空串，列表渲染始终有文案。</li>
+          <li><b>超长/特殊字符原因</b>：渲染前统一做 HTML 转义，防止破坏列表结构。</li>
+          <li><b>数据持久化</b>：每次增删改后写入 <code>localStorage["overtime_records_v3"]</code>；存储不可用时静默降级，不影响本次会话内的操作。</li>
+          <li><b>滑动与点击互斥</b>：水平位移不足 6px 视为点击；滑动结束后 400ms 内屏蔽 click，防止误删。</li>
+          <li><b>垂直滚动优先</b>：垂直位移大于水平位移时不进入滑动态，列表正常滚动。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================== 页 2 · 时长统计 ===================== -->
+    <section class="sp-page" data-page="stats">
+
+      <div class="sp-sec">
+        <h4><i>1</i>核心用户操作流程<em>区间统计 / 导出 / 导入</em></h4>
+        <ol class="sp-flow">
+          <li>点底部导航切到<b>「时长统计」</b>：标题变为「时长统计」、内容区滚动位置归零、右下角<b>FAB 自动隐藏</b>（本页无新增类操作）。</li>
+          <li>默认区间为<b>「全部」</b>，环形图与时长概览均按<b>全量数据</b>计算。</li>
+          <li>点<b>「去年」/「今年」</b> → 立即按整年区间重算（去年 01-01 ~ 12-31 / 今年 01-01 ~ 12-31），并给出「统计范围：… · 命中 N 条加班记录」。</li>
+          <li>点<b>「时间」</b> → 展开自定义起止日期行；分别点击开始、结束输入框唤起日历。两个日期<b>都选定后</b>才按该区间统计，仅填一端不生效（此时显示「请选择开始与结束日期，两者都选定后即按该区间统计」）。</li>
+          <li>查看<b>「调休额度构成」</b>环形图（可用 / 已使用 / 已过期）与<b>「时长概览」</b>分项，两者均收敛到所选区间。</li>
+          <li><b>数据导出</b>：点「数据导出」→ 弹层显示文件名与「N 条记录 · 体积」→ 选择<b>保存到本地 / 发送给微信好友 / 复制为文本</b>。</li>
+          <li><b>数据导入</b>：点「数据导入」→ 选择<b>从本地文件选择 / 从微信聊天文件选择</b> → 按 id 合并去重导入 → toast 汇总「新增 / 覆盖 / 跳过」条数。</li>
+        </ol>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>2</i>界面元素交互行为<em>点击左侧对应元素可定位</em></h4>
+
+        <div class="sp-item" data-spec="st-range">
+          <div class="sp-t">统计区间分段控件 <em>四选一</em><span class="sp-sel">#rngSeg</span></div>
+          <div class="sp-d">
+            <span class="sp-li">四个互斥选项：<b>全部 / 去年 / 今年 / 时间</b>。点击即切换选中态（选中项为主色实心，未选中为浅灰底深灰字），并<b>立即重算本页全部数值</b>。</span>
+            <span class="sp-li">本控件<b>只作用于「时长统计」页</b>，与「加班记录」页的年-月筛选互相独立、互不影响。</span>
+            <span class="sp-li">区间一律按<b>加班日期</b>判定；口径为「含首含尾」（from ≤ 加班日期 ≤ to）。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-range-custom">
+          <div class="sp-t">自定义起止日期 <em>双端生效</em><span class="sp-sel">#rngCustom / #rngClear</span></div>
+          <div class="sp-d">
+            <span class="sp-li">仅在选中「时间」时展开（其余模式收起）。两个输入框均为<b>只读 + 自绘日历</b>，点击唤起日期面板。</span>
+            <span class="sp-li"><b>不预填</b>：两个框初始留空并显示 placeholder「开始日期 / 结束日期」，避免给用户「已设定区间」的错觉。</span>
+            <span class="sp-li"><b>仅当两端都选定</b>才应用区间并重算；只填一端时统计保持不变，只给出文字提示。</span>
+            <span class="sp-li">「清除」按钮只<b>清空两个日期</b>，不改变当前选中的「时间」模式，清空后回到「请选择开始与结束日期…」提示态。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-donut">
+          <div class="sp-t">调休额度构成 <em>环形图</em><span class="sp-sel">#donut + .legend</span></div>
+          <div class="sp-d">
+            <span class="sp-li">由 <code>conic-gradient</code> 绘制的三段环形：<b>绿＝可用调休</b>、<b>蓝＝已使用</b>、<b>红＝已过期</b>，占比按三者时长之和归一。中心显示<b>可用天数</b>（可用时长 ÷ 8，保留 1 位小数）。</span>
+            <span class="sp-li">右侧图例逐项列出三者时长，色点与扇区颜色一致。</span>
+            <span class="sp-li">口径：<b>已过期仅统计「剩余未抵扣」</b>的时长；已抵扣部分始终计入「已使用」，不受有效期影响。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-overview">
+          <div class="sp-t">时长概览 <em>五项指标</em><span class="sp-sel">.bigstat</span></div>
+          <div class="sp-d">
+            <span class="sp-li">展示：<b>累计加班时长</b>（Σ 有效时长）、<b>可调休加班时长</b>、<b>攻关加班时长</b>、<b>法定节假日加班时长</b>、<b>折算调休天数</b>（可调休时长 ÷ 8）。</span>
+            <span class="sp-li">全部数值<b>随统计区间实时重算</b>，时长保留最多 2 位小数、天数保留 1 位。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-import">
+          <div class="sp-t">「数据导入」按钮 <em>蓝字描边</em><span class="sp-sel">#btnImport</span></div>
+          <div class="sp-d">
+            <span class="sp-li">点击打开导入弹层（<b>不立即执行导入</b>，先让用户选来源）。按钮为白底 + 主色描边 + 图标，表达「次要操作」。</span>
+            <span class="sp-li">导入是<b>纯合并</b>语义：不会清空或删除任何已有记录，只做「同 id 覆盖、新 id 追加」。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-export">
+          <div class="sp-t">「数据导出」按钮 <em>主色实心</em><span class="sp-sel">#btnExport</span></div>
+          <div class="sp-d">
+            <span class="sp-li">点击即<b>生成 JSON 备份</b>（含 <code>schemaVersion:3</code>、<code>app</code>、<code>exportedAt</code>、<code>records</code>）并打开导出弹层，弹层顶部展示<b>文件名与「N 条记录 · 体积」</b>。</span>
+            <span class="sp-li">导出为<b>全量导出</b>，与当前统计区间无关。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-rule">
+          <div class="sp-t">调休有效期规则 <em>只读说明</em><span class="sp-sel">.rule-card</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>2026 年 10 月之前</b>的加班：有效期统一至<b>次年 3 月 31 日</b>（按加班所在自然年顺延）。</span>
+            <span class="sp-li"><b>2026 年 10 月及之后</b>的加班：有效期至<b>下一自然季度末</b>（先定位加班所在季度，再顺延一个季度，取该季度最后一天：03-31 / 06-30 / 09-30 / 12-31）。</span>
+            <span class="sp-li"><b>通用口径</b>：有效期<b>含截止日当天</b>；截止日之后仍未抵扣的剩余时长计入「已过期」，不再参与抵扣。两档规则在 9/10 月交界处衔接连续。</span>
+            <span class="sp-li">本卡片为静态说明，不响应点击；每笔可调休加班的截止日已在「加班记录」明细中逐条标注。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-import-sheet">
+          <div class="sp-t">导入弹层 <em>两步流程</em><span class="sp-sel">#sheet-import</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>步骤①选来源</b>：<b>从本地文件选择</b>（唤起系统文件选择器，仅接受 <code>.json</code>）／<b>从微信聊天文件选择</b>（进入步骤②，列出聊天中收到的备份文件，点击即导入）。</span>
+            <span class="sp-li"><b>步骤②</b>：顶部显示返回箭头，标题切为「微信聊天文件」；点击任一文件按合并规则导入并关闭弹层。返回箭头回到步骤①。</span>
+            <span class="sp-li"><b>合并规则</b>：按记录 <code>id</code> 去重——同 id 用新值<b>覆盖</b>，新 id <b>追加</b>；缺少 id / date / 起止时间的异常记录<b>跳过并计数</b>。</span>
+            <span class="sp-li">「取消」或点遮罩关闭弹层；关闭时不影响任何已有数据。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="st-export-sheet">
+          <div class="sp-t">导出弹层 <em>三步流程</em><span class="sp-sel">#sheet-export</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>步骤①选去向</b>：<b>保存到本地</b>（下载 .json 文件）／<b>发送给微信好友</b>（进入步骤②）／<b>复制为文本</b>（写入剪贴板）。</span>
+            <span class="sp-li"><b>步骤②</b>：联系人列表（文件传输助手 / 我的电脑 / 备份群），点击任一即模拟发送并关闭弹层。</span>
+            <span class="sp-li"><b>步骤③ 手动复制兜底</b>：仅当剪贴板写入被浏览器拦截时进入——展示只读文本框（<b>点击即全选</b>）与「全选并复制」按钮，保证用户始终能拿到导出内容。</span>
+            <span class="sp-li">真机映射：保存到本地 → <code>wx.saveFileToDisk</code>；发送给好友 → <code>FileSystemManager.writeFile</code> + <code>wx.shareFileMessage</code>；从聊天文件导入 → <code>wx.chooseMessageFile</code> + <code>readFile</code>。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>3</i>状态切换</h4>
+        <table class="sp-table">
+          <tr><th>对象</th><th>状态</th><th>切换条件与表现</th></tr>
+          <tr><td>统计区间</td><td>全部 / 去年 / 今年 / 时间</td><td>点击分段项即切换并重算；「时间」额外展开自定义日期行。</td></tr>
+          <tr><td>自定义日期行</td><td>展开 / 收起</td><td>仅「时间」模式展开，其余模式收起并隐藏。</td></tr>
+          <tr><td>区间提示行</td><td>隐藏 / 待补全 / 已生效</td><td>「全部」时隐藏；「时间」但日期未选全 → 提示补全；已生效 → 显示「统计范围：… · 命中 N 条加班记录」。</td></tr>
+          <tr><td>环形图</td><td>有数据 / 无数据</td><td>三者时长之和 &gt; 0 → 三段彩色环；＝ 0 → 灰色空环，中心天数显示 0。</td></tr>
+          <tr><td>导入弹层</td><td>步骤① / 步骤②</td><td>选「微信聊天文件」进入步骤②，返回箭头退回步骤①；每次打开都重置回步骤①。</td></tr>
+          <tr><td>导出弹层</td><td>步骤① / 步骤② / 步骤③</td><td>正常路径①②；仅当剪贴板被拦截才进入③（手动复制）。每次打开重置回步骤①。</td></tr>
+        </table>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>4</i>操作反馈<em>底部 toast</em></h4>
+        <table class="sp-table">
+          <tr><th>触发</th><th>反馈文案</th></tr>
+          <tr><td>保存到本地成功</td><td><b>已保存到本地：overtime_records_YYYY-MM-DD.json</b></td></tr>
+          <tr><td>下载能力不可用</td><td><b>当前环境不支持下载，已改为复制到剪贴板</b>（自动降级）</td></tr>
+          <tr><td>复制成功</td><td><b>已复制导出数据到剪贴板</b></td></tr>
+          <tr><td>复制被拦截</td><td>不弹 toast，直接进入<b>手动复制步骤③</b>（文本框已全选）</td></tr>
+          <tr><td>好友发送（演示）</td><td><b>已发送给「文件传输助手」（原型演示）</b></td></tr>
+          <tr><td>导入成功</td><td><b>已导入「文件名」：新增 N 条 · 覆盖 M 条 · 跳过 K 条异常</b></td></tr>
+          <tr><td>文件为空</td><td><b>文件内容为空</b></td></tr>
+          <tr><td>JSON 解析失败</td><td><b>JSON 解析失败，请检查文件内容</b></td></tr>
+          <tr><td>格式不符</td><td><b>数据格式不正确（缺少 records 数组）</b></td></tr>
+          <tr><td>文件类型不符</td><td><b>请选择 .json 格式的备份文件</b></td></tr>
+        </table>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>5</i>异常与边界情况</h4>
+        <ul class="sp-edge">
+          <li><b>起止日期倒置</b>：若先选结束、后选更晚的开始，系统<b>自动交换两端</b>，保证区间始终有效，而不是变成空区间。</li>
+          <li><b>只填一端</b>：不施加过滤，统计保持原值，仅提示补全；避免出现「区间半成品」导致的误读。</li>
+          <li><b>「清除」按钮</b>：只清空两个日期、不改变模式，清空后回到提示态而非「全部」。</li>
+          <li><b>切走页面再回来</b>：统计区间与自定义日期<b>在会话内保留</b>（不随切页重置）。</li>
+          <li><b>导入空文件</b>：toast「文件内容为空」，不修改任何数据。</li>
+          <li><b>导入非 JSON 文本</b>：解析失败即拦截，不进入合并流程，数据保持原样。</li>
+          <li><b>导入缺少 records 数组</b>：拦截并提示格式不正确；同时兼容<b>纯数组</b>格式的备份文件。</li>
+          <li><b>导入脏记录</b>：缺 id / date / start / end 的记录被<b>跳过并计数</b>，在 toast 里单独说明，绝不写入内存——避免污染统计与列表渲染。</li>
+          <li><b>导入重复执行（幂等）</b>：同一文件重复导入不会产生重复数据，同 id 记录始终只保留一份（后导入覆盖先导入）。</li>
+          <li><b>文件类型限制</b>：本地导入只接受 <code>.json</code>（扩展名或 MIME 命中其一即可），其他类型直接提示并中止。</li>
+          <li><b>重复选择同一文件</b>：选择器在读取后<b>清空 value</b>，同一文件可再次选中并重新导入。</li>
+          <li><b>下载失败降级</b>：环境不支持 <code>Blob</code> 下载时自动改为复制到剪贴板；复制再失败则进入手动复制步骤③，不存在「无路可走」的死路。</li>
+          <li><b>零记录导出</b>：无任何记录时仍可正常导出（records 为空数组），便于「清空后备份」场景。</li>
+          <li><b>真机环境差异</b>：浏览器下无 <code>wx</code> 对象时，微信相关入口使用演示数据；检测到 <code>wx.chooseMessageFile</code> 时自动切换为真实小程序 API。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================== 页 3 · 调休记录 ===================== -->
+    <section class="sp-page" data-page="leaves">
+
+      <div class="sp-sec">
+        <h4><i>1</i>核心用户操作流程<em>使用 / 修改 / 撤销 / 筛选</em></h4>
+        <ol class="sp-flow">
+          <li>点底部导航切到<b>「调休记录」</b>：标题变为「调休记录」，右下角 FAB 的语义切换为<b>「使用调休」</b>。</li>
+          <li>顶部三张卡展示<b>可用 / 已使用 / 已过期</b>，为<b>全局口径</b>（不随本页年-月筛选变化），与「时长统计」页全量口径一致。</li>
+          <li>点右下角<b>「＋」</b> → 自底部弹出「使用调休」弹层。</li>
+          <li>依次完成：<b>选择调休使用日期</b>（默认今天，点击输入框唤起日历）→ 在「可调休且仍有剩余、未过期」的加班清单中<b>勾选</b>要抵扣的项 → 按需<b>修改每项的抵扣时长</b>（上限＝该笔剩余）→ 核对底部「本次抵扣 / 抵扣后可用」→ 点<b>「确认抵扣」</b>。</li>
+          <li><b>修改</b>：列表项<b>向左滑动</b>露出「修改 / 撤销」→ 点<b>「修改」</b> → 弹层进入编辑态（标题「修改调休记录」、按钮「保存修改」），<b>预填该笔调休在各加班上的原抵扣</b> → 保存语义＝<b>先撤销原事件、再按新选择重算</b>（天然支持改日期、改抵扣来源、改时长）。</li>
+          <li><b>撤销</b>：同一路径点<b>「撤销」</b> → 删除该调休日期的全部抵扣 → 相关加班的剩余额度回涨 → 列表与统计刷新 → toast「已撤销 …」。</li>
+          <li><b>筛选</b>：按<b>调休使用日期</b>的年 / 月过滤下方列表；顶部三张汇总卡不受筛选影响。</li>
+        </ol>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>2</i>界面元素交互行为<em>点击左侧对应元素可定位</em></h4>
+
+        <div class="sp-item" data-spec="lv-summary">
+          <div class="sp-t">顶部汇总卡 <em>全局口径</em><span class="sp-sel">.summary-row</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>可用</b>＝Σ 可调休记录的剩余未抵扣时长（且未过期）；<b>已使用</b>＝Σ 已抵扣时长；<b>已过期</b>＝Σ 已过截止日且仍未抵扣的剩余时长。</span>
+            <span class="sp-li">三项均以<b>全部数据</b>为口径，<b>不随本页年-月筛选变化</b>——避免「筛选后额度看起来变了」的误解。</span>
+            <span class="sp-li">执行撤销、修改、删除加班记录后，三张卡<b>实时重算</b>。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="lv-filter">
+          <div class="sp-t">年 / 月筛选 <em>按调休日期</em><span class="sp-sel">#lvYearBtn #lvMonthBtn</span></div>
+          <div class="sp-d">
+            <span class="sp-li">与「加班记录」页同一套自绘下拉与联动规则；<b>过滤依据是「调休使用日期」</b>（leaveDate），而非加班日期。</span>
+            <span class="sp-li">年份、月份选项均由<b>调休事件数据派生</b>；条件不为「全部」时出现「重置」按钮，计数变为「共 N 次（全部 M 次）」。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="lv-list">
+          <div class="sp-t">调休使用记录列表 <em>左滑手势</em><span class="sp-sel">#leaveList</span></div>
+          <div class="sp-d">
+            <span class="sp-li">列表按<b>调休使用日期倒序</b>排列。每条展示：<b>调休日期 · 星期</b>、<b>抵扣来源</b>（逐笔列出「加班日期 · 星期 X.Xh」，按加班日期倒序）、以及本次调休<b>总抵扣时长</b>。</span>
+            <span class="sp-li">同一 leaveDate 的多笔抵扣会<b>聚合成一条记录</b>展示（左侧蓝色竖条 + 右侧总时长）。</span>
+            <span class="sp-li">支持与加班明细完全一致的<b>左滑手势</b>（阈值、回弹、单行展开、400ms 防误触规则全部相同），露出「修改 / 撤销」两个动作按钮。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="lv-row-edit">
+          <div class="sp-t">「修改」按钮 <em>蓝色 · 左位</em><span class="sp-sel">.swipe-action.edit</span></div>
+          <div class="sp-d">
+            <span class="sp-li">仅当该行<b>已滑出</b>时点击才生效。点击后打开「使用调休」弹层并进入<b>编辑态</b>：弹层预填该调休日期，并<b>把该笔曾经抵扣过的加班全部勾选出来</b>，各自填入原抵扣时长。</span>
+            <span class="sp-li">关键差异：编辑态下这些「原来源」<b>即使当前剩余已为 0 也会出现在清单里</b>（因其即将被撤销而恢复可用），且其可抵扣上限显示为「当前剩余 ＋ 本笔已扣」。</span>
+            <span class="sp-li">保存＝<b>先撤销该日期的全部原抵扣、再按新勾选重新写入</b>；因此把来源全部换成另一批加班、或只保留其中一项，都能正确结算。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="lv-row-undo">
+          <div class="sp-t">「撤销」按钮 <em>红色 · 右位</em><span class="sp-sel">.swipe-action.del</span></div>
+          <div class="sp-d">
+            <span class="sp-li">仅当该行已滑出时点击才生效；点击后<b>删除该调休日期的全部抵扣记录</b>（含全部来源），并持久化、刷新所有页面。</span>
+            <span class="sp-li">撤销后，被释放的时长<b>回到「可用」</b>（若已过有效期则归入「已过期」）；对应的抵扣标注会从「加班记录」明细中一并消失。</span>
+            <span class="sp-li"><b>无二次确认</b>，撤销动作不可撤销，请谨慎操作。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-leave">
+          <div class="sp-t">使用 / 修改调休弹层 <em>Bottom Sheet</em><span class="sp-sel">#sheet-leave</span></div>
+          <div class="sp-d">
+            <span class="sp-li">自底部滑入、背后压半透明遮罩；点「取消」或点遮罩关闭，<b>关闭不保存、修改作废</b>。每次打开都会重置勾选状态并收起列表已展开行。</span>
+            <span class="sp-li"><b>无可用额度时</b>：清单区显示空态「当前没有可抵扣的加班时长（可调休加班已用完或已过期）」，此时无法保存。</span>
+            <span class="sp-li">底部始终显示「本次抵扣」与「抵扣后可用」两个实时数值，供保存前核对。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-leave-date">
+          <div class="sp-t">调休使用日期 <em>自绘日历</em><span class="sp-sel">#lvDate</span></div>
+          <div class="sp-d">
+            <span class="sp-li">只读输入框，点击唤起自绘日历（与加班日期同一套组件）；默认预填<b>今天</b>。修改日期只影响「该笔调休记在哪一天」，不改变抵扣金额的算法。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-leave-pick">
+          <div class="sp-t">抵扣加班清单 <em>勾选 + 改量</em><span class="sp-sel">#pickList</span></div>
+          <div class="sp-d">
+            <span class="sp-li">仅列出<b>类型为「可调休」、剩余 &gt; 0 且未过期</b>的加班，按加班日期倒序；每行显示「加班日期 · 星期 · 可调休」「剩余 <b>X.Xh</b> 可抵扣」与一个时长输入框。</span>
+            <span class="sp-li"><b>点击整行</b>切换勾选：勾选时若原时长为 0 则自动填入<b>该笔全部剩余</b>；取消勾选不影响其他行。</span>
+            <span class="sp-li">时长输入框在<b>未勾选时禁用</b>（灰显），勾选后可编辑；输入值被实时钳制在 <b>0 ~ 该笔剩余</b> 之间，输入 &gt; 0 会自动勾选该行，失焦时统一格式化为最多 2 位小数。</span>
+            <span class="sp-li">清单区独立滚动（头部「可用 X.Xh」与底部汇总固定不动），清单很长时不会挤压弹层其他区域。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-leave-rt">
+          <div class="sp-t">「本次抵扣 / 抵扣后可用」 <em>实时预览</em><span class="sp-sel">.rt</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>本次抵扣</b>＝Σ 所有已勾选项的时长；<b>抵扣后可用</b>＝当前可用总额 − 本次抵扣。</span>
+            <span class="sp-li">任一勾选 / 取消勾选 / 修改时长<b>都会即时刷新</b>这两个数字，是保存前唯一的核对依据。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="sheet-leave-save">
+          <div class="sp-t">「确认抵扣 / 保存修改」 <em>主操作</em><span class="sp-sel">#lvSave</span></div>
+          <div class="sp-d">
+            <span class="sp-li"><b>使用态</b>：校验 → 逐笔写入 <code>deductions</code> → 关闭弹层 → 刷新 → toast「已记录 某日 · 星期 调休抵扣 X.X 小时」。</span>
+            <span class="sp-li"><b>编辑态</b>：先撤销该日期的原抵扣，再按新勾选重算写入 → 关闭 → 刷新 → toast「已更新 某日 · 星期 调休抵扣 X.X 小时」。</span>
+            <span class="sp-li">写入时逐笔按「该笔剩余」二次钳制，确保任何情况下都不会出现超额抵扣。</span>
+          </div>
+        </div>
+
+        <div class="sp-item" data-spec="fab">
+          <div class="sp-t">悬浮按钮 FAB <em>本页语义</em><span class="sp-sel">#fab</span></div>
+          <div class="sp-d">
+            <span class="sp-li">在本页点击 FAB ＝ <b>使用调休</b>（打开抵扣弹层，与「加班记录」页的「添加加班」区分）；悬浮提示同步为「使用调休」。</span>
+            <span class="sp-li">按钮外观与位置在两页完全一致，仅行为与提示文案按当前页切换。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>3</i>状态切换</h4>
+        <table class="sp-table">
+          <tr><th>对象</th><th>状态</th><th>切换条件与表现</th></tr>
+          <tr><td>弹层</td><td>使用态 / 编辑态</td><td>由 <code>editingLeave</code> 是否为空决定标题、副标题与主按钮文案；保存或取消后复位。</td></tr>
+          <tr><td>抵扣项</td><td>未勾选 / 已勾选</td><td>未勾选：时长输入框禁用、整行浅色；已勾选：输入框可用、整行高亮并显示「✓」。</td></tr>
+          <tr><td>抵扣后可用</td><td>正常 / 超额预警</td><td>抵扣后可用 &lt; 0 时卡片切换为警示样式；正常为正数时使用默认样式。</td></tr>
+          <tr><td>列表行</td><td>闭合 / 拖拽中 / 展开</td><td>与加班明细一致：<code>.revealing</code> / <code>.is-open</code>，阈值 76px。</td></tr>
+          <tr><td>FAB</td><td>添加加班 / 使用调休</td><td>随当前页切换语义与悬浮提示；在时长统计页隐藏。</td></tr>
+          <tr><td>列表空态</td><td>无记录 / 筛选无命中</td><td>「暂无调休使用记录 / 点击右下角「＋」记录调休使用」；筛选无命中时提示「该年月暂无调休记录 / 试试切换其他年份或月份」。</td></tr>
+        </table>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>4</i>操作反馈<em>底部 toast</em></h4>
+        <table class="sp-table">
+          <tr><th>触发</th><th>反馈文案</th></tr>
+          <tr><td>使用成功</td><td><b>已记录 2026-10-04 · 周日 调休抵扣 8.07 小时</b></td></tr>
+          <tr><td>修改成功</td><td><b>已更新 2026-10-04 · 周日 调休抵扣 X.X 小时</b></td></tr>
+          <tr><td>撤销成功</td><td><b>已撤销 2026-10-04 · 周日 调休记录</b></td></tr>
+          <tr><td>未选日期</td><td><b>请选择调休使用日期</b>（弹层保持打开）</td></tr>
+          <tr><td>未勾选任何项</td><td><b>请至少勾选一项加班时长</b>（弹层保持打开，且<b>不改动原记录</b>）</td></tr>
+        </table>
+        <div class="sp-item" style="margin-top:8px">
+          <div class="sp-d">
+            <span class="sp-li">所有提示均为<b>底部居中浮层、1.9s 自动消失</b>；校验类提示不关闭弹层，用户可直接修正后再次提交。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sp-sec">
+        <h4><i>5</i>异常与边界情况</h4>
+        <ul class="sp-edge">
+          <li><b>无可用额度</b>：清单区显示空态文案，勾选与保存均无从进行；用户可先到「加班记录」页确认是否还有未过期、未用完的可调休加班。</li>
+          <li><b>抵扣时长超过该笔剩余</b>：输入即被<b>实时钳制</b>到上限，不允许录入超额值；保存时再做一次钳制兜底。</li>
+          <li><b>抵扣后可用为负</b>：底部「抵扣后可用」卡片转为警示样式，提示已超出可用总额。</li>
+          <li><b>未勾选任何项就保存</b>：拦截并 toast，弹层保持打开；<b>编辑态下也不会破坏原记录</b>（校验先于撤销执行，避免出现「原数据已撤销但新值未写入」的中间态）。</li>
+          <li><b>同一日期重复使用调休</b>：同一天再次提交会<b>追加</b>为该日期的额外抵扣来源，列表仍聚合成一条、时长累加。</li>
+          <li><b>编辑时改到其他日期</b>：语义是「撤销旧日期的这一笔 + 在新日期重新写入」，旧日期若无其他来源则从列表消失。</li>
+          <li><b>编辑时移除某个原来源</b>：该加班被释放的时长立即回到可用额度，可在同一次操作中抵扣到别的加班上。</li>
+          <li><b>有效期边界</b>：有效期<b>含截止日当天</b>；截止日当天仍可抵扣，次日起该笔剩余归入「已过期」且不再出现在可勾选清单中。</li>
+          <li><b>非「可调休」类型</b>：攻关、法定节假日类型的加班<b>永远不进入</b>抵扣清单，也不参与额度构成。</li>
+          <li><b>列表筛选不影响额度</b>：年-月筛选只影响列表展示，顶部「可用 / 已使用 / 已过期」始终为全局口径。</li>
+          <li><b>撤销不可恢复</b>：无二次确认、无撤销栈；如需找回请重新进入弹层按原来源与时长重新抵扣。</li>
+          <li><b>与加班记录联动</b>：在「加班记录」页删除一条含抵扣的记录，本页对应调休事件同步减少或消失，额度实时回涨。</li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+</aside>
+
+<script>
+(function(){
+  "use strict";
+  var STORE_KEY="overtime_records_v3"; // v3：加班类型三分类 + 新增「有效加班时长」字段
+  var WEEK=["周日","周一","周二","周三","周四","周五","周六"];
+
+  // ---- seed：调休抵扣以 deductions 标注在加班明细上，无独立额度表 ----
+  //  type: comp=可调休 / pr=攻关 / holiday=法定节假日；valid=有效加班时长（统计口径，可小于起止时长）
+  var SEED=[
+    {date:"2026-01-01",start:"09:00",end:"18:00",reason:"元旦保障值班",type:"holiday",valid:8,deductions:[]},
+    {date:"2026-01-02",start:"18:30",end:"21:30",reason:"项目上线支持",type:"comp",valid:3,deductions:[]},
+    {date:"2026-01-06",start:"19:00",end:"21:30",reason:"版本发布值守",type:"comp",valid:2.5,deductions:[{leaveDate:"2026-04-29",hours:2.5}]},
+    {date:"2026-01-08",start:"18:30",end:"21:00",reason:"需求评审准备",type:"comp",valid:2.5,deductions:[{leaveDate:"2026-05-12",hours:2.5}]},
+    {date:"2026-04-04",start:"09:00",end:"18:00",reason:"清明保障值班",type:"holiday",valid:8,deductions:[]},
+    {date:"2026-04-05",start:"10:00",end:"18:00",reason:"清明保障值班",type:"holiday",valid:7,deductions:[]},
+    {date:"2026-04-15",start:"19:00",end:"22:00",reason:"线上故障排查",type:"comp",valid:3,deductions:[]},
+    {date:"2026-04-21",start:"18:30",end:"21:30",reason:"客户紧急支持",type:"pr",valid:3,deductions:[]},
+    {date:"2026-05-11",start:"19:00",end:"21:30",reason:"迭代功能开发",type:"comp",valid:2.5,deductions:[]},
+    {date:"2026-05-19",start:"18:30",end:"22:30",reason:"联调与回归测试",type:"comp",valid:4,deductions:[]},
+    {date:"2026-06-18",start:"19:00",end:"21:00",reason:"攻关活动支持",type:"pr",valid:2,deductions:[]},
+    {date:"2026-08-17",start:"09:00",end:"18:00",reason:"周末版本保障",type:"comp",valid:8,deductions:[]},
+    {date:"2026-09-19",start:"09:00",end:"18:00",reason:"国庆保障演练",type:"comp",valid:8,deductions:[]},
+    {date:"2025-09-10",start:"19:00",end:"22:00",reason:"旧需求收尾（已过期）",type:"comp",valid:3,deductions:[]}
+  ];
+
+  var records=load();
+
+  function norm(r){
+    if(r.type!=="comp" && r.type!=="pr" && r.type!=="holiday") r.type="holiday"; // 兼容旧的 paid
+    if(typeof r.valid!=="number" || isNaN(r.valid)) r.valid=r2(calcDur(r.start,r.end)); // 缺省有效时长=起止时长
+    r.valid=r2(r.valid);
+    r.deductions=Array.isArray(r.deductions)? r.deductions : [];                // 兼容缺失/非数组
+    return r;
+  }
+  function load(){
+    try{ var raw=localStorage.getItem(STORE_KEY); if(raw) return JSON.parse(raw).map(norm); }catch(e){}
+    return SEED.map(function(r,i){ return norm(Object.assign({id:i+1},r)); });
+  }
+  function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(records)); }catch(e){} }
+
+  // ---- helpers ----
+  function r1(n){ return Math.round(n*10)/10; }
+  function r2(n){ return Math.round(n*100)/100; }   // 2 位精度：保留「有效时长/抵扣」的 2 位小数
+  function calcDur(start,end){
+    // 防御：外部导入 / 手工改过的 localStorage 可能缺起止时间，直接 split 会抛
+    // TypeError 并中断整页渲染（renderAll → renderRecords → durOf → calcDur），故此处兜底为 0。
+    if(!start || !end) return 0;
+    var a=start.split(":").map(Number), b=end.split(":").map(Number);
+    if(isNaN(a[0]) || isNaN(b[0])) return 0;
+    var m=(b[0]*60+b[1])-(a[0]*60+a[1]);
+    if(m<=0) m+=24*60;
+    return r2(m/60);
+  }
+  // 起止时间是否跨天：结束时间不晚于起始时间即视为跨到次日（与 calcDur 的 m<=0 口径完全一致）
+  function isCrossDay(start,end){
+    if(!start||!end) return false;
+    var a=start.split(":").map(Number), b=end.split(":").map(Number);
+    return (b[0]*60+b[1])-(a[0]*60+a[1])<=0;
+  }
+  // 时间区间文案：跨天时在结束时间前加「次日」，如 18:30 — 次日 01:34
+  function rangeText(start,end){ return start+" — "+(isCrossDay(start,end)?"次日 ":"")+end; }
+  function durOf(r){ return calcDur(r.start,r.end); }
+  // 有效加班时长：统计口径（用户可手动填写，未必等于起止时长）
+  function effOf(r){ return r2(typeof r.valid==="number" ? r.valid : calcDur(r.start,r.end)); }
+  function usedOf(r){ return r2((r.deductions||[]).reduce(function(a,d){return a+d.hours;},0)); }
+  // 剩余可抵扣额度 = 有效加班时长 − 已抵扣
+  function remainOf(r){ return Math.max(0, r2(effOf(r)-usedOf(r))); }
+  // 时长显示：默认 1 位小数；若该值确实需要 2 位小数（如 3.25）则保留 2 位。
+  // 例：3 -> "3.0"、3.2 -> "3.2"、3.25 -> "3.25"、3.333 -> "3.33"。
+  function fmtH(h){
+    var n=Number(h)||0;
+    var v2=r2(n);            // 2 位精度（先消除浮点误差）
+    var v1=r1(v2);           // 1 位精度
+    if(Math.abs(v2-v1)<1e-9) return v1.toFixed(1);   // 末位为 0 -> 维持 1 位
+    return v2.toFixed(2);                             // 否则保留 2 位
+  }
+  function ymd(d){ return String(d).substring(0,10); }             // 完整日期（含年份）：2026-10-03
+  function md(d){ var p=ymd(d).split("-"); return p[1]+"月"+p[2]+"日"; }
+  function ymdWd(d){ return ymd(d)+" · "+wd(d); }                   // 统一日期显示：2026-09-19 · 周六
+  function wd(d){ return WEEK[new Date(ymd(d)+"T00:00:00").getDay()]; }
+  // ---- 调休有效期（有效截止日） ----
+  // 规则以 2026-10-01 为分界：
+  //   · 2026 年 10 月之前的加班时长 —— 有效期至「次年 3 月 31 日」（旧规，按自然年顺延）；
+  //   · 2026 年 10 月及之后的加班时长 —— 有效期至「下一自然季度末」（新规，按自然季度顺延）。
+  // 有效期含截止日当天；截止日之后仍未抵扣的剩余时长计为「已过期」。
+  var VALID_CUTOFF="2026-10-01";
+  var QUARTER_END=[[3,31],[6,30],[9,30],[12,31]];   // 自然季度末：Q1/Q2/Q3/Q4
+  // 单笔加班时长的有效截止日，返回 "YYYY-MM-DD"（含当日）
+  function validUntilOf(d){
+    var s=ymd(d), p=s.split("-"), y=+p[0], m=+p[1];
+    if(s<VALID_CUTOFF) return (y+1)+"-03-31";          // 旧规：次年 3 月 31 日
+    var nq=Math.floor((m-1)/3)+1;                      // 下一自然季度（0..4，4 表示跨年回 Q1）
+    var e=QUARTER_END[nq%4];
+    return (y+Math.floor(nq/4))+"-"+String(e[0]).padStart(2,"0")+"-"+String(e[1]).padStart(2,"0");
+  }
+  function isExpired(r){ return todayStr()>validUntilOf(r.date); }   // 按「日」比较：截止日当天仍有效
+  function todayStr(){ var n=new Date(); return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+"-"+String(n.getDate()).padStart(2,"0"); }
+  function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+  // 明细标签：可调休→可用/已使用/已过期；攻关、法定节假日直接显示类型名
+  function statusOf(r){
+    if(r.type==="pr") return {k:"攻关", cls:"pr"};
+    if(r.type==="holiday") return {k:"法定节假日", cls:"paid"};
+    if(remainOf(r)<=0) return {k:"已使用", cls:"used"};
+    if(isExpired(r)) return {k:"已过期", cls:"exp"};
+    return {k:"可用", cls:"comp"};
+  }
+
+  // ---- derivations（全部由加班明细派生，无独立额度表） ----
+  // 累计加班时长 = Σ 所有记录的「有效加班时长」
+  // 可调休加班时长 = Σ「可调休」类型的有效加班时长；折算调休天数 = 可调休时长 ÷ 8
+  // list 缺省为全部记录；传入子集即可得到「该子集内」的同口径统计（页面筛选即复用此入口）
+  function totals(list){
+    list=list||records;
+    var total=0, comp=0, pr=0, holiday=0;
+    list.forEach(function(r){
+      var e=effOf(r); total+=e;
+      if(r.type==="comp") comp+=e; else if(r.type==="pr") pr+=e; else holiday+=e;
+    });
+    // 时长合计取 2 位精度（保留 2 位小数能力）；折算天数仍按 1 位（天为派生计数，非时长）
+    return {total:r2(total), comp:r2(comp), pr:r2(pr), holiday:r2(holiday), days:r1(comp/8)};
+  }
+  function quotaSummary(list){
+    list=list||records;
+    var av=0, us=0, ex=0;
+    list.forEach(function(r){
+      if(r.type!=="comp") return;
+      var used=usedOf(r), rem=remainOf(r);
+      us+=used;                        // 已抵扣的时长
+      if(rem>0){ if(isExpired(r)) ex+=rem; else av+=rem; }
+    });
+    return {av:r2(av), us:r2(us), ex:r2(ex)};
+  }
+  // 调休使用事件：按 leaveDate 聚合所有加班明细上的 deductions
+  function leaveEvents(){
+    var map={};
+    records.forEach(function(r){
+      (r.deductions||[]).forEach(function(d){
+        if(!map[d.leaveDate]) map[d.leaveDate]={leaveDate:d.leaveDate, hours:0, sources:[]};
+        map[d.leaveDate].hours+=d.hours;
+        map[d.leaveDate].sources.push({recDate:r.date, hours:d.hours});
+      });
+    });
+    var arr=Object.keys(map).map(function(k){ map[k].hours=r2(map[k].hours); return map[k]; });
+    arr.sort(function(a,b){ return a.leaveDate<b.leaveDate?1:-1; });
+    return arr;
+  }
+  // 可供选择的加班：comp 且有剩余、未过期
+  function availableRecords(){
+    return records.filter(function(r){ return r.type==="comp" && remainOf(r)>0 && !isExpired(r); })
+                  .sort(function(a,b){ return a.date>b.date?-1:1; });
+  }
+  function currentAvailable(){ return r2(availableRecords().reduce(function(a,r){ return a+remainOf(r); },0)); }
+
+  // ============================================================
+  // 通用自绘下拉（dd）—— 统一页面内全部「下拉类」控件
+  //   · 面板作为 .phone 的绝对定位子节点，绕开 .sheet/.field 的 overflow 裁剪；
+  //   · 面板宽度对齐触发器，下方空间不足时自动向上翻转；
+  //   · 选项具备 悬停 / 按下 / 选中 三态（样式见 .dd-opt 系列）。
+  // 选值型：selDef(get, options, onPick)；时间型：timeDef(hiddenInput)
+  // ============================================================
+  var ddPanel=null, ddOwner=null, ddDef=null;
+  var DD_TICK='<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+
+  function ddPad2(n){ return (n<10?"0":"")+n; }
+  function ddOptHTML(k, v, label){
+    return '<div class="dd-opt" data-k="'+k+'" data-v="'+v+'" role="option">'+
+      (k==="v" ? '<span class="t">'+esc(label)+'</span>'+DD_TICK : label)+'</div>';
+  }
+  function ddEnsurePanel(){
+    if(ddPanel) return ddPanel;
+    ddPanel=document.createElement("div");
+    ddPanel.className="dd-panel";
+    ddPanel.addEventListener("click",function(e){
+      var o=e.target.closest(".dd-opt"); if(!o || !ddDef) return;
+      var k=o.dataset.k, v=o.dataset.v;
+      if(k==="h"||k==="m"){                      // 时间：选完「时」停留，等「分」；面板保持展开
+        var p=String(ddDef.get()).split(":");
+        if(k==="h") p[0]=v; else p[1]=v;
+        ddDef.set(p[0]+":"+p[1]);
+        ddMarkSel(); ddSyncVal();
+      }else{                                     // 普通下拉：选中即收起
+        ddDef.onPick(v); ddClose();
+      }
+    });
+    document.querySelector(".phone").appendChild(ddPanel);
+    // 鼠标点击选项时，清掉可能存在的键盘高亮环，避免与鼠标态残留叠加
+    ddPanel.addEventListener("pointerdown", ddKbClear);
+    return ddPanel;
+  }
+  function ddMarkSel(){
+    if(!ddPanel || !ddDef) return;
+    var cur=String(ddDef.get()), p=cur.split(":");
+    ddPanel.querySelectorAll(".dd-opt").forEach(function(o){
+      var k=o.dataset.k, on;
+      if(k==="h") on=(o.dataset.v===p[0]);
+      else if(k==="m") on=(o.dataset.v===p[1]);
+      else on=(o.dataset.v===cur);
+      o.classList.toggle("sel", on);
+      o.setAttribute("aria-selected", on?"true":"false");
+    });
+  }
+  function ddSyncVal(){
+    if(!ddOwner || !ddDef) return;
+    var el=ddOwner.querySelector(".dd-val"); if(el) el.textContent=ddDef.get();
+  }
+  function ddScrollSel(){
+    ddPanel.querySelectorAll(".dd-list").forEach(function(list){
+      var sel=list.querySelector(".dd-opt.sel"); if(!sel) return;
+      list.scrollTop=Math.max(0, sel.offsetTop-(list.clientHeight-sel.offsetHeight)/2);
+    });
+  }
+  function ddPlace(){
+    var ph=document.querySelector(".phone").getBoundingClientRect();
+    var tr=ddOwner.getBoundingClientRect();
+    var GAP=6, PAD=8;
+    var top=tr.bottom-ph.top+GAP, left=tr.left-ph.left;
+    var below=ph.height-(tr.bottom-ph.top)-GAP-PAD;      // 触发器下方可用高度
+    var above=(tr.top-ph.top)-GAP-PAD;                   // 上方可用高度
+    var flip=(above>below);
+    ddPanel.style.maxHeight=Math.max(132, Math.min(300, flip?above:below))+"px";
+    ddPanel.classList.toggle("up", flip);
+    if(flip) top=Math.max(PAD, (tr.top-ph.top)-GAP-ddPanel.offsetHeight);
+    var w=ddPanel.offsetWidth;
+    if(left+w>ph.width-PAD) left=Math.max(PAD, ph.width-PAD-w);   // 右越界 -> 右对齐
+    ddPanel.style.top=top+"px";
+    ddPanel.style.left=left+"px";
+  }
+  function ddBuild(trigger, def){
+    if(def.type==="time"){
+      ddPanel.classList.add("time");
+      var hh="", mm="";
+      for(var i=0;i<24;i++){ var a=ddPad2(i); hh+=ddOptHTML("h", a, a); }
+      for(var j=0;j<60;j++){ var b=ddPad2(j); mm+=ddOptHTML("m", b, b); }
+      ddPanel.innerHTML='<div class="dd-cols">'+
+        '<div class="dd-col"><div class="dd-hd">时</div><div class="dd-list">'+hh+'</div></div>'+
+        '<div class="dd-col"><div class="dd-hd">分</div><div class="dd-list">'+mm+'</div></div>'+
+      '</div>';
+      ddPanel.style.width=Math.max(trigger.offsetWidth, 168)+"px";
+    }else{
+      ddPanel.classList.remove("time");
+      ddPanel.innerHTML='<div class="dd-list">'+def.options().map(function(o){
+        return ddOptHTML("v", o.v, o.label);
+      }).join("")+'</div>';
+      ddPanel.style.width=trigger.offsetWidth+"px";
+    }
+    ddMarkSel();
+  }
+  function ddOpen(trigger, def){
+    var wasOpen=!!(ddPanel && ddPanel.classList.contains("show") && ddOwner===trigger);
+    ddClose();
+    if(wasOpen) return;                                  // 再次点击同一触发器 -> 收起
+    ddEnsurePanel();
+    ddOwner=trigger; ddDef=def;
+    ddBuild(trigger, def);
+    var wrap=trigger.closest(".dd"); if(wrap) wrap.classList.add("open");
+    ddPanel.classList.add("show");
+    ddPlace(); ddScrollSel(); ddKbInit();
+  }
+  function ddClose(){
+    if(ddOwner){ var w=ddOwner.closest(".dd"); if(w) w.classList.remove("open"); }
+    if(ddPanel) ddPanel.classList.remove("show");
+    ddKbList=null; ddKbIdx=-1; ddKbClear();
+    ddOwner=null; ddDef=null;
+  }
+  function selDef(get, options, onPick){
+    return {type:"sel", get:get, options:options, onPick:onPick};
+  }
+  function timeDef(input){
+    return {type:"time", get:function(){ return input.value||"00:00"; },
+      set:function(v){ input.value=v; input.dispatchEvent(new Event("input",{bubbles:true})); }};
+  }
+  // 面板外按下、切页、弹窗开关、容器滚动、Esc —— 一律收起，避免面板悬空
+  document.addEventListener("pointerdown",function(e){
+    if(!ddPanel || !ddPanel.classList.contains("show")) return;
+    if(e.target.closest(".dd-panel") || e.target.closest(".dd-trigger")) return;
+    ddClose();
+  }, true);
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape") ddClose(); });
+  // 容器滚动时收起面板，避免面板「悬空」错位；但面板内部列表自身的滚动必须放行，
+  // 否则「打开时把选中项滚入可视区」会立刻把自己关掉（scroll 不冒泡，故用捕获监听）。
+  document.querySelector(".phone").addEventListener("scroll",function(e){
+    if(ddPanel && e.target && ddPanel.contains(e.target)) return;
+    ddClose();
+  }, true);
+
+  // 键盘可达性：面板打开时，方向键移动高亮项（.kb 描边环），Enter/Space 选中，
+  // Home/End 跳首尾，时间面板用 ←/→ 在「时/分」两列间切换，Tab 关闭。
+  var ddKbList=null, ddKbIdx=-1;
+  function ddKbClear(){ if(ddPanel) ddPanel.querySelectorAll(".dd-opt.kb").forEach(function(o){ o.classList.remove("kb"); }); }
+  function ddKbSet(list, idx){
+    if(!list) return;
+    var opts=list.querySelectorAll(".dd-opt");
+    idx=Math.max(0, Math.min(idx, opts.length-1));
+    ddKbClear();
+    ddKbIdx=idx; ddKbList=list;
+    var o=opts[idx]; if(o){ o.classList.add("kb"); o.scrollIntoView({block:"nearest"}); }
+  }
+  function ddKbInit(){
+    if(!ddPanel || !ddDef) return;
+    if(ddDef.type==="time"){
+      var lists=ddPanel.querySelectorAll(".dd-list");
+      var hl=lists[0];
+      var cur=String(ddDef.get()).split(":")[0];
+      var hi=[].indexOf.call(hl.querySelectorAll(".dd-opt"), hl.querySelector('.dd-opt[data-v="'+cur+'"]'));
+      ddKbSet(hl, hi<0?0:hi);
+    }else{
+      var list=ddPanel.querySelector(".dd-list");
+      var si=[].indexOf.call(list.querySelectorAll(".dd-opt"), list.querySelector(".dd-opt.sel"));
+      ddKbSet(list, si<0?0:si);
+    }
+  }
+  function ddKbActivate(){
+    if(!ddKbList) return;
+    var o=ddKbList.querySelectorAll(".dd-opt")[ddKbIdx]; if(!o) return;
+    var k=o.dataset.k;
+    o.click();                                   // 复用面板 click：选值 / 设时间 / 收起（普通下拉）
+    if(ddDef && ddDef.type==="time"){
+      if(k==="h" && ddPanel.classList.contains("show")){
+        var lists=ddPanel.querySelectorAll(".dd-list");
+        var mi=Number(String(ddDef.get()).split(":")[1])||0;
+        ddKbSet(lists[1], mi);                   // 选完「时」自动跳到「分」列
+      }else if(k==="m"){
+        ddClose();                               // 选完「分」收起
+      }
+    }
+  }
+  document.addEventListener("keydown",function(e){
+    if(!ddPanel || !ddPanel.classList.contains("show") || !ddDef) return;
+    var lists=ddPanel.querySelectorAll(".dd-list");
+    var cur=ddKbList || lists[0];
+    switch(e.key){
+      case "ArrowDown": e.preventDefault(); ddKbSet(cur, ddKbIdx+1); break;
+      case "ArrowUp":   e.preventDefault(); ddKbSet(cur, ddKbIdx-1); break;
+      case "Home":      e.preventDefault(); ddKbSet(cur, 0); break;
+      case "End":       e.preventDefault(); ddKbSet(cur, cur.querySelectorAll(".dd-opt").length-1); break;
+      case "ArrowRight":
+        if(ddDef.type==="time" && lists[1] && cur!==lists[1]){ e.preventDefault(); ddKbSet(lists[1], ddKbIdx); }
+        break;
+      case "ArrowLeft":
+        if(ddDef.type==="time" && lists[0] && cur!==lists[0]){ e.preventDefault(); ddKbSet(lists[0], ddKbIdx); }
+        break;
+      case "Enter":
+      case " ":
+      case "Spacebar": e.preventDefault(); ddKbActivate(); break;
+      case "Tab": ddClose(); break;
+      default: break;
+    }
+  });
+
+  // ============================================================
+  // 通用「年-月」筛选（加班记录页 / 调休记录页共用同一套行为与外观）
+  //   opts.dates(): 返回参与筛选的 ISO 日期串数组
+  //   opts.render(): 值变化后的重渲染回调
+  //   opts.ids: 触发器与文案/重置按钮的元素 id
+  // ============================================================
+  function ymFilter(opts){
+    var st={y:"all", m:"all"};
+    function years(){                                    // 由数据派生年份，倒序（新的在前）
+      var s={}; opts.dates().forEach(function(d){ s[d.substring(0,4)]=1; });
+      return Object.keys(s).sort().reverse();
+    }
+    function months(){                                   // 月份选项随年份联动：只保留该年有数据的月份
+      var s={}; opts.dates().forEach(function(d){
+        if(st.y!=="all" && d.substring(0,4)!==st.y) return;
+        s[d.substring(5,7)]=1;
+      });
+      return Object.keys(s).sort();
+    }
+    st.on=function(){ return st.y!=="all" || st.m!=="all"; };
+    st.match=function(d){
+      if(st.y!=="all" && d.substring(0,4)!==st.y) return false;
+      if(st.m!=="all" && d.substring(5,7)!==st.m) return false;
+      return true;
+    };
+    st.sync=function(){                                  // 回写文案 / 已选高亮 / 重置按钮显隐
+      var ys=years();
+      if(st.y!=="all" && ys.indexOf(st.y)<0) st.y="all";  // 选中项已不存在（如记录被删）则回退「全部」
+      var ms=months();
+      if(st.m!=="all" && ms.indexOf(st.m)<0) st.m="all";
+      document.getElementById(opts.ids.yVal).textContent = st.y==="all" ? "全部年份" : st.y+" 年";
+      document.getElementById(opts.ids.mVal).textContent = st.m==="all" ? "全部月份" : Number(st.m)+" 月";
+      document.getElementById(opts.ids.yWrap).classList.toggle("on", st.y!=="all");
+      document.getElementById(opts.ids.mWrap).classList.toggle("on", st.m!=="all");
+      document.getElementById(opts.ids.reset).hidden = !st.on();
+    };
+    document.getElementById(opts.ids.yBtn).addEventListener("click",function(){
+      ddOpen(this, selDef(function(){ return st.y; }, function(){
+        return [{v:"all",label:"全部年份"}].concat(years().map(function(y){ return {v:y,label:y+" 年"}; }));
+      }, function(v){ st.y=v; opts.render(); }));
+    });
+    document.getElementById(opts.ids.mBtn).addEventListener("click",function(){
+      ddOpen(this, selDef(function(){ return st.m; }, function(){
+        return [{v:"all",label:"全部月份"}].concat(months().map(function(m){ return {v:m,label:Number(m)+" 月"}; }));
+      }, function(v){ st.m=v; opts.render(); }));
+    });
+    document.getElementById(opts.ids.reset).addEventListener("click",function(){ st.y="all"; st.m="all"; opts.render(); });
+    return st;
+  }
+
+  // ---- 加班记录：年-月筛选 ----
+  // 筛选仅作用于「加班明细」列表；顶部汇总卡仍为全局口径（累计/可调休/折算），避免与统计页产生歧义。
+  var recFilter=ymFilter({
+    dates:function(){ return records.map(function(r){ return ymd(r.date); }); },
+    render:renderRecords,
+    ids:{yWrap:"fyWrap", yVal:"fltYearVal", yBtn:"fltYearBtn",
+         mWrap:"fmWrap", mVal:"fltMonthVal", mBtn:"fltMonthBtn", reset:"fltReset"}
+  });
+  function filteredRecords(){
+    return records.filter(function(r){ return recFilter.match(ymd(r.date)); });
+  }
+
+  // ---- 调休记录：年-月筛选（按调休使用日期 leaveDate 过滤） ----
+  var lvFilter=ymFilter({
+    dates:function(){ return leaveEvents().map(function(e){ return ymd(e.leaveDate); }); },
+    render:renderLeaves,
+    ids:{yWrap:"lyWrap", yVal:"lvYearVal", yBtn:"lvYearBtn",
+         mWrap:"lmWrap", mVal:"lvMonthVal", mBtn:"lvMonthBtn", reset:"lvReset"}
+  });
+
+  // ---- render：加班记录 ----
+  function renderRecords(){
+    // 顶部汇总与明细列表统一取自「筛选后的集合」，两者口径严格一致：筛选一变化即实时重算刷新。
+    var rows=filteredRecords();
+    var t=totals(rows);
+    document.getElementById("sumTotal").innerHTML=fmtH(t.total)+'<small> h</small>';
+    document.getElementById("sumComp").innerHTML=fmtH(t.comp)+'<small> h</small>';
+    document.getElementById("sumDays").innerHTML =t.days+'<small> 天</small>';
+    var sn=document.getElementById("sumNote");
+    sn.hidden=!recFilter.on();
+    if(recFilter.on()) sn.textContent="已按所选时间区间实时统计（命中 "+rows.length+" 条加班记录）";
+    recFilter.sync();
+    var list=document.getElementById("recList");
+    if(!records.length){ list.innerHTML='<div class="empty">暂无加班记录<br>点击右下角「＋」添加加班</div>'; document.getElementById("recCount").textContent=""; return; }
+    if(!rows.length){
+      list.innerHTML='<div class="empty">该年月暂无加班记录<br>试试切换其他年份或月份</div>';
+      document.getElementById("recCount").textContent="共 0 条（全部 "+records.length+" 条）";
+      return;
+    }
+    document.getElementById("recCount").textContent = recFilter.on()
+      ? "共 "+rows.length+" 条（全部 "+records.length+" 条）"
+      : "共 "+records.length+" 条";
+    var sorted=rows.slice().sort(function(a,b){ return a.date<b.date?1:-1; });   // 保留原有排序：日期倒序
+    list.innerHTML=sorted.map(function(r){
+      var h=durOf(r), e=effOf(r), used=usedOf(r), rem=remainOf(r), st=statusOf(r);
+      var tags='<span class="tag '+st.cls+'">'+st.k+'</span>';
+      if(r.type==="comp"){
+        if(used>0) tags+='<span class="tag used">已抵扣 '+fmtH(used)+'h</span>';
+        if(rem>0 && !isExpired(r)) tags+='<span class="tag comp">剩余 '+fmtH(rem)+'h</span>';
+        // 逐条标记该笔可调休加班的有效截止日（按 2026-10 分界的双档规则计算）
+        tags+='<span class="tag valid'+(isExpired(r)?' exp':'')+'">有效期至 '+validUntilOf(r.date)+'</span>';
+      }
+      var ded='';
+      if(r.type==="comp" && (r.deductions||[]).length){
+        var lines=r.deductions.map(function(d){
+          return '<div class="deduct-line"><span>用于抵扣 <b>'+ymdWd(d.leaveDate)+'</b> 调休</span><span class="amt">'+fmtH(d.hours)+'h</span></div>';
+        }).join("");
+        ded='<div class="deduct-box" data-spec="rec-deduct"><div class="dh"><span>调休抵扣标注</span><span class="rem">剩余 '+fmtH(rem)+'h</span></div>'+lines+'</div>';
+      }
+      return '<div class="swipe" data-id="'+r.id+'" data-spec="rec-list">'+
+        '<div class="swipe-actions">'+
+          '<div class="swipe-action edit" data-spec="rec-row-edit" data-act="edit" data-id="'+r.id+'">修改</div>'+
+          '<div class="swipe-action del" data-spec="rec-row-del" data-act="del" data-id="'+r.id+'">删除</div>'+
+        '</div>'+
+        '<div class="rec swipe-content">'+
+          '<div class="rec-main">'+
+            '<div class="top"><div class="date">'+ymdWd(r.date)+'</div>'+
+            '<div class="dur">'+fmtH(h)+' h</div></div>'+
+            '<div class="mid"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg><span class="tm">'+rangeText(r.start,r.end)+'</span>'+
+              '<span class="eff">有效 <b>'+fmtH(e)+'h</b></span></div>'+
+            '<div class="reason">'+esc(r.reason||"未填写原因")+'</div>'+
+            '<div class="tags">'+tags+'</div>'+ ded +
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }).join("");
+    bindSwipe(list);
+  }
+  // 年-月筛选的交互（打开面板、选中、重置）统一由 ymFilter 绑定，见上方通用筛选模块。
+
+  // ============================================================
+  // 时长统计 · 时间区间选择器（全部 / 去年 / 今年 / 时间）
+  //   · 仅作用于「时长统计」页，与加班记录页的「年-月」下拉筛选相互独立；
+  //   · 「时间」展开自定义起止日期：开始/结束均留空显示 placeholder、不预填；
+  //   · 仅当开始与结束两个日期都选定后，才按该区间过滤并重算本页统计（半填时不生效）；
+  //   · 区间一律按「加班日期」判定，本页全部数值（汇总卡 / 额度构成 / 时长概览）同步收敛到该区间。
+  // ============================================================
+  var statsRange={mode:"all", start:"", end:""};
+  function rngYear(){ return new Date().getFullYear(); }
+  function rngBounds(){
+    var y=rngYear();
+    if(statsRange.mode==="last") return {from:(y-1)+"-01-01", to:(y-1)+"-12-31"};
+    if(statsRange.mode==="year") return {from:y+"-01-01", to:y+"-12-31"};
+    if(statsRange.mode==="time"){
+      // 仅两端都选定才生效；只填一端或都不填时不施加过滤，统计保持不变
+      if(statsRange.start && statsRange.end) return {from:statsRange.start, to:statsRange.end};
+      return {from:"", to:""};
+    }
+    return {from:"", to:""};                                   // 全部：无边界
+  }
+  function rangedRecords(){                                    // 区间内加班记录（无边界时等价于全部）
+    var b=rngBounds();
+    if(!b.from && !b.to) return records;
+    return records.filter(function(r){
+      var s=ymd(r.date);
+      if(b.from && s<b.from) return false;
+      if(b.to && s>b.to) return false;
+      return true;
+    });
+  }
+  // 静默回写日期框（不派发 change），避免与自身的 change 监听形成递归
+  function rngSetIso(id, iso){
+    var el=document.getElementById(id); if(!el) return;
+    if(iso){ el.dataset.iso=iso; el.value=iso.replace(/-/g,"/"); }
+    else { el.dataset.iso=""; el.value=""; }
+  }
+  function renderRangeBar(){
+    var seg=document.getElementById("rngSeg");
+    seg.querySelectorAll(".rng-opt").forEach(function(b){
+      var on=b.dataset.rng===statsRange.mode;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", on?"true":"false");
+    });
+    var custom=document.getElementById("rngCustom"), show=statsRange.mode==="time";
+    custom.classList.toggle("show", show);
+    custom.setAttribute("aria-hidden", show?"false":"true");
+    rngSetIso("rngStart", statsRange.start);
+    rngSetIso("rngEnd", statsRange.end);
+    var note=document.getElementById("rngNote");
+    if(statsRange.mode==="all"){ note.hidden=true; note.textContent=""; return; }
+    note.hidden=false;
+    if(statsRange.mode==="time" && !(statsRange.start && statsRange.end)){
+      note.textContent="请选择开始与结束日期，两者都选定后即按该区间统计";
+      return;
+    }
+    var b=rngBounds();
+    note.textContent="统计范围："+(b.from||"不限")+" ~ "+(b.to||"不限")+"　·　命中 "+rangedRecords().length+" 条加班记录";
+  }
+  document.getElementById("rngSeg").addEventListener("click", function(e){
+    var b=e.target.closest ? e.target.closest(".rng-opt") : null; if(!b) return;
+    statsRange.mode=b.dataset.rng;
+    // 「时间」模式不预填日期：开始/结束均留空（显示 placeholder），
+    // 待用户把两个日期都选定后才应用区间、重算统计
+    renderStats();
+  });
+  ["rngStart","rngEnd"].forEach(function(id){
+    document.getElementById(id).addEventListener("change", function(){
+      statsRange.start=isoOf("rngStart"); statsRange.end=isoOf("rngEnd");
+      // 起止倒置（如先选结束再选更晚的起始）自动交换，保证区间始终有效而非变成空区间
+      if(statsRange.start && statsRange.end && statsRange.end<statsRange.start){
+        var t=statsRange.start; statsRange.start=statsRange.end; statsRange.end=t;
+      }
+      renderStats();
+    });
+  });
+  document.getElementById("rngClear").addEventListener("click", function(){
+    statsRange.start=""; statsRange.end=""; renderStats();
+  });
+
+  function renderStats(){
+    var list=rangedRecords(), t=totals(list), q=quotaSummary(list);   // 本页数值统一取自所选区间
+    document.getElementById("stTotal").innerHTML  =fmtH(t.total)+'<small> h</small>';
+    document.getElementById("stComp").innerHTML   =fmtH(t.comp)+'<small> h</small>';
+    document.getElementById("stPr").innerHTML     =fmtH(t.pr)+'<small> h</small>';
+    document.getElementById("stHoliday").innerHTML=fmtH(t.holiday)+'<small> h</small>';
+    document.getElementById("stDays").innerHTML   =t.days+'<small> 天</small>';
+    var sum=q.av+q.us+q.ex, pAv=sum?q.av/sum*100:0, pUs=sum?q.us/sum*100:0;
+    var donut=document.getElementById("donut");
+    donut.style.background = sum
+      ? "conic-gradient(var(--green) 0 "+pAv+"%, var(--primary) "+pAv+"% "+(pAv+pUs)+"%, var(--red) "+(pAv+pUs)+"% 100%)"
+      : "var(--divider)";
+    document.getElementById("donutBig").textContent=r1(q.av/8);
+    document.getElementById("lgAv").textContent=fmtH(q.av)+"h";
+    document.getElementById("lgUs").textContent=fmtH(q.us)+"h";
+    document.getElementById("lgEx").textContent=fmtH(q.ex)+"h";
+    renderRangeBar();
+  }
+
+  function renderLeaves(){
+    var q=quotaSummary(), all=leaveEvents();
+    // 顶部三格与加班记录页保持同一结构：数值 + <small> h</small>，单位随数值、标签保持简短；
+    // 与加班记录页一致，顶部汇总为全局口径，仅下方列表受年-月筛选影响。
+    document.getElementById("lvAv").innerHTML=fmtH(q.av)+'<small> h</small>';
+    document.getElementById("lvUs").innerHTML=fmtH(q.us)+'<small> h</small>';
+    document.getElementById("lvEx").innerHTML=fmtH(q.ex)+'<small> h</small>';
+    lvFilter.sync();
+    var ev=all.filter(function(e){ return lvFilter.match(ymd(e.leaveDate)); });
+    document.getElementById("lvCount").textContent = lvFilter.on()
+      ? "共 "+ev.length+" 次（全部 "+all.length+" 次）"
+      : "共 "+all.length+" 次";
+    var list=document.getElementById("leaveList");
+    if(!all.length){ list.innerHTML='<div class="empty">暂无调休使用记录<br>点击右下角「＋」记录调休使用</div>'; return; }
+    if(!ev.length){ list.innerHTML='<div class="empty">该年月暂无调休记录<br>试试切换其他年份或月份</div>'; return; }
+    list.innerHTML=ev.map(function(e){
+      var src=e.sources.slice().sort(function(a,b){return a.recDate<b.recDate?1:-1;})
+        .map(function(s){ return ymdWd(s.recDate)+' '+fmtH(s.hours)+'h'; }).join('、');
+      return '<div class="swipe" data-lv="'+e.leaveDate+'" data-spec="lv-list">'+
+        '<div class="swipe-actions">'+
+          '<div class="swipe-action edit" data-spec="lv-row-edit" data-act="edit" data-lv="'+e.leaveDate+'">修改</div>'+
+          '<div class="swipe-action del" data-spec="lv-row-undo" data-act="undo" data-lv="'+e.leaveDate+'">撤销</div>'+
+        '</div>'+
+        '<div class="leave swipe-content">'+
+          '<div class="badge"></div>'+
+          '<div class="info">'+
+            '<div class="d1">'+ymdWd(e.leaveDate)+'</div>'+
+            '<div class="d2">抵扣来源：<b>'+src+'</b></div>'+
+          '</div>'+
+          '<div class="h">'+fmtH(e.hours)+'h</div>'+
+        '</div>'+
+      '</div>';
+    }).join("");
+    bindSwipe(list);
+  }
+
+  // ---- tabs / fab ----
+  var titles={records:"加班记录",stats:"时长统计",leaves:"调休记录"};
+  var curTab="records";
+  function switchTab(tab){
+    curTab=tab;
+    document.querySelectorAll(".navitem").forEach(function(n){ n.classList.toggle("active", n.dataset.tab===tab); });
+    document.querySelectorAll(".page").forEach(function(p){ p.classList.remove("active"); });
+    document.getElementById("page-"+tab).classList.add("active");
+    document.getElementById("appTitle").textContent=titles[tab];
+    document.querySelector(".pages").scrollTop=0;
+    closeAllSwipes();
+    ddClose();
+    updateFab();
+    specSyncPage(tab);          // 右侧交互说明面板同步切换到该页
+  }
+  document.querySelectorAll(".navitem").forEach(function(n){ n.addEventListener("click",function(){ switchTab(n.dataset.tab); }); });
+  function updateFab(){
+    var fab=document.getElementById("fab");
+    if(curTab==="stats"){ fab.classList.add("hide"); return; }
+    fab.classList.remove("hide");
+    fab.title = curTab==="leaves" ? "使用调休" : "添加加班";   // 纯图标按钮，仅保留 tooltip
+  }
+
+  // ---- sheets ----
+  var scrim=document.getElementById("scrim");
+  var sheetAdd=document.getElementById("sheet-add"), sheetLeave=document.getElementById("sheet-leave"),
+      sheetImport=document.getElementById("sheet-import"), sheetExport=document.getElementById("sheet-export");
+  function openSheet(el){ closeSheets(); closeAllSwipes(); el.classList.add("show"); scrim.classList.add("show"); }
+  function closeSheets(){ ddClose(); [sheetAdd,sheetLeave,sheetImport,sheetExport].forEach(function(s){ if(s) s.classList.remove("show"); }); scrim.classList.remove("show"); }
+  scrim.addEventListener("click",closeSheets);
+  document.getElementById("fab").addEventListener("click",function(){ if(curTab==="leaves") openLeaveSheet(); else openAddSheet(); });
+  document.getElementById("btnCancel").addEventListener("click",closeSheets);
+  document.getElementById("lvCancel").addEventListener("click",closeSheets);
+
+  // ---- 添加加班 ----
+  var curType="comp", validTouched=false, editingId=null;
+  function openAddSheet(){
+    editingId=null;
+    setIso("fDate", todayStr());
+    document.getElementById("fReason").value="";
+    document.querySelectorAll("#fType button").forEach(function(x){ x.classList.toggle("on", x.dataset.v==="comp"); });
+    curType="comp"; validTouched=false; recalcDur();
+    document.querySelector("#sheet-add h2").textContent="添加加班记录";
+    document.querySelector("#sheet-add .sub").textContent="填写加班信息，时长将根据起止时间自动计算";
+    document.getElementById("btnSave").textContent="保存记录";
+    openSheet(sheetAdd);
+  }
+  // 修改加班记录：用已有记录预填表单，保存时原地更新（保留 id 与 deductions）
+  function openEditRecord(id){
+    var r=records.filter(function(x){return x.id===id;})[0]; if(!r) return;
+    editingId=id;
+    setIso("fDate", r.date);
+    document.getElementById("fStart").value=r.start; syncTimeTrigger("fStart","fStartBtn");
+    document.getElementById("fEnd").value=r.end; syncTimeTrigger("fEnd","fEndBtn");
+    document.getElementById("fReason").value=r.reason||"";
+    document.querySelectorAll("#fType button").forEach(function(x){ x.classList.toggle("on", x.dataset.v===r.type); });
+    curType=r.type; validTouched=true;                       // 有效时长沿用记录值，不被自动计算覆写
+    document.getElementById("fValid").value=fmtH(r.valid);
+    recalcDur();
+    document.querySelector("#sheet-add h2").textContent="修改加班记录";
+    document.querySelector("#sheet-add .sub").textContent="修改加班信息，时长将根据起止时间自动计算";
+    document.getElementById("btnSave").textContent="保存修改";
+    openSheet(sheetAdd);
+  }
+  function recalcDur(){
+    var s=document.getElementById("fStart").value, e=document.getElementById("fEnd").value;
+    var h=(s&&e)?calcDur(s,e):0;
+    document.getElementById("fDur").textContent=fmtH(h)+" 小时";
+    // 跨天提醒：结束时间早于/等于起始时间时按次日计算，这里同步给出与列表一致的文案
+    var cross=(s&&e)?isCrossDay(s,e):false;
+    var xd=document.getElementById("fXday"); if(xd) xd.hidden=!cross;
+    var xh=document.getElementById("fXdayHint");
+    if(xh){
+      xh.hidden=!cross;
+      if(cross) xh.textContent="跨天加班：结束时间按次日计算，列表中显示为 "+rangeText(s,e);
+    }
+    var fv=document.getElementById("fValid");
+    if(!validTouched) fv.value=fmtH(h);   // 未手动改过时，跟随自动计算（有效时长≤加班时长的上限在保存时校验）
+  }
+  ["fStart","fEnd"].forEach(function(id){ document.getElementById(id).addEventListener("input",recalcDur); });
+  // 起止时间：自绘时间下拉（时/分双列，滚动可选），值写回隐藏 input 并沿用既有计算链路
+  function syncTimeTrigger(inputId, trigId){
+    var el=document.querySelector("#"+trigId+" .dd-val");
+    if(el) el.textContent=document.getElementById(inputId).value;
+  }
+  function bindTimeDD(inputId, trigId){
+    document.getElementById(trigId).addEventListener("click",function(){
+      ddOpen(this, timeDef(document.getElementById(inputId)));
+    });
+    document.getElementById(inputId).addEventListener("input",function(){ syncTimeTrigger(inputId, trigId); });
+    syncTimeTrigger(inputId, trigId);
+  }
+  bindTimeDD("fStart","fStartBtn");
+  bindTimeDD("fEnd","fEndBtn");
+  document.getElementById("fValid").addEventListener("input",function(){ validTouched=true; });
+  // 输入结束时规范化：整数补到 1 位小数（如 3 -> 3.0），其余按 fmtH 维持/保留 2 位
+  document.getElementById("fValid").addEventListener("blur",function(){
+    var v=parseFloat(this.value); if(isNaN(v)) v=0;
+    this.value=fmtH(v);
+  });
+  document.querySelectorAll("#fType button").forEach(function(b){
+    b.addEventListener("click",function(){
+      document.querySelectorAll("#fType button").forEach(function(x){x.classList.remove("on");});
+      b.classList.add("on"); curType=b.dataset.v;
+    });
+  });
+  document.getElementById("btnSave").addEventListener("click",function(){
+    var date=isoOf("fDate");
+    var start=document.getElementById("fStart").value, end=document.getElementById("fEnd").value;
+    var reason=document.getElementById("fReason").value.trim();
+    if(!date){ toast("请选择加班日期"); return; }
+    if(!start||!end){ toast("请填写起止时间"); return; }
+    var h=calcDur(start,end);
+    var ev=parseFloat(document.getElementById("fValid").value);
+    if(isNaN(ev)||ev<0) ev=h;
+    if(ev>h) ev=h;                        // 有效时长不超过本次加班时长
+    ev=r2(ev);
+    if(editingId!=null){
+      var rec=records.filter(function(x){return x.id===editingId;})[0];
+      if(rec){
+        // 有效时长不得低于已被调休抵扣的部分，否则会出现「负剩余」
+        var deducted=usedOf(rec);
+        if(ev<deducted){ ev=deducted; toast("有效时长已自动调整为已抵扣的 "+fmtH(deducted)+"h"); }
+        rec.date=date; rec.start=start; rec.end=end; rec.reason=reason||"未填写原因";
+        rec.type=curType; rec.valid=ev;   // 保留 rec.deductions 不变
+      }
+      editingId=null;
+      persist(); renderAll(); closeSheets();
+      toast("已更新加班记录 · 加班 "+fmtH(h)+"h / 有效 "+fmtH(ev)+"h");
+      return;
+    }
+    var id=records.length?Math.max.apply(null,records.map(function(r){return r.id;}))+1:1;
+    records.push({id:id,date:date,start:start,end:end,reason:reason||"未填写原因",type:curType,valid:ev,deductions:[]});
+    persist(); renderAll(); closeSheets();
+    toast("已添加 "+(curType==="comp"?"可调休":curType==="pr"?"攻关":"法定节假日")+" · 加班 "+fmtH(h)+"h / 有效 "+fmtH(ev)+"h");
+  });
+
+  // ---- 使用调休（抵扣式） ----
+  var picks={}, editingLeave=null;
+  function openLeaveSheet(){
+    editingLeave=null;
+    setIso("lvDate", todayStr());
+    picks={};
+    availableRecords().forEach(function(r){ picks[r.id]={checked:false, max:remainOf(r), hours:remainOf(r)}; });
+    renderPickList(); updateRt();
+    document.querySelector("#sheet-leave h2").textContent="使用调休";
+    document.querySelector("#sheet-leave .sub").textContent="选择使用调休的日期，并从下方「可调休且仍有剩余」的加班中勾选要抵扣的时长";
+    document.getElementById("lvSave").textContent="确认抵扣";
+    openSheet(sheetLeave);
+  }
+  // 修改调休记录：按原 leaveDate 反查各加班上的抵扣并预填，保存时先撤销原事件再按新选择重算
+  function openEditLeave(lv){
+    editingLeave=lv;
+    setIso("lvDate", lv);
+    picks={};
+    availableRecords().forEach(function(r){ picks[r.id]={checked:false, max:remainOf(r), hours:remainOf(r)}; });
+    // 把「本笔调休曾抵扣过的加班」也纳入可选项（即便当前剩余为 0，因其即将被撤销恢复）
+    records.forEach(function(r){
+      var d=(r.deductions||[]).filter(function(x){ return x.leaveDate===lv; });
+      if(!d.length) return;
+      var prev=d.reduce(function(s,x){ return s+x.hours; },0);
+      var p=picks[r.id] || (picks[r.id]={checked:true, max:remainOf(r), hours:prev});
+      p.checked=true;
+      p.max=remainOf(r)+prev;            // 撤销本笔后的可用 = 当前剩余 + 本笔已扣
+      p.hours=prev;
+    });
+    renderPickList(); updateRt();
+    document.querySelector("#sheet-leave h2").textContent="修改调休记录";
+    document.querySelector("#sheet-leave .sub").textContent="修改调休使用日期，或调整抵扣的加班与时长";
+    document.getElementById("lvSave").textContent="保存修改";
+    openSheet(sheetLeave);
+  }
+  function renderPickList(){
+    var list=document.getElementById("pickList");
+    document.getElementById("pkAvail").textContent=fmtH(currentAvailable())+"h";
+    var ids=Object.keys(picks);
+    if(!ids.length){ list.innerHTML='<div class="empty" style="padding:24px 8px">当前没有可抵扣的加班时长<br>（可调休加班已用完或已过期）</div>'; return; }
+    list.innerHTML=ids.map(function(id){
+      var r=records.filter(function(x){return x.id===Number(id);})[0]; if(!r) return "";
+      var p=picks[id];
+      return '<label class="pick'+(p.checked?" on":"")+'" data-rid="'+id+'">'+
+        '<span class="cb">'+(p.checked?'✓':'')+'</span>'+
+        '<div class="pi"><div class="pd">'+ymdWd(r.date)+'<span class="wk"> · 可调休</span></div>'+
+        '<div class="pr">剩余 <b>'+fmtH(p.max)+'h</b> 可抵扣</div></div>'+
+        '<input class="amt" type="text" inputmode="decimal" value="'+fmtH(p.hours)+'" data-rid="'+id+'"'+(p.checked?"":' disabled')+'>'+
+        '<span class="unit">h</span>'+
+      '</label>';
+    }).join("");
+  }
+  document.getElementById("pickList").addEventListener("click",function(e){
+    if(e.target.classList.contains("amt")) return;
+    var label=e.target.closest(".pick"); if(!label) return;
+    var rid=Number(label.dataset.rid), p=picks[rid]; if(!p) return;
+    p.checked=!p.checked;
+    if(p.checked && !(p.hours>0)) p.hours=p.max;
+    renderPickList(); updateRt();
+  });
+  document.getElementById("pickList").addEventListener("input",function(e){
+    if(!e.target.classList.contains("amt")) return;
+    var rid=Number(e.target.dataset.rid), p=picks[rid]; if(!p) return;
+    var v=parseFloat(e.target.value); if(isNaN(v)) v=0;
+    if(v<0) v=0; if(v>p.max) v=p.max;
+    p.hours=r2(v);
+    if(p.hours>0) p.checked=true;
+    updateRt();
+  });
+  // 抵扣金额输入框失焦时规范化：整数补 .0，并按存储值（含上限钳制）统一格式化
+  document.getElementById("pickList").addEventListener("focusout",function(e){
+    if(!e.target.classList.contains("amt")) return;
+    var rid=Number(e.target.dataset.rid), p=picks[rid]; if(!p) return;
+    e.target.value=fmtH(p.hours);
+  });
+  function selectedHours(){ var s=0; Object.keys(picks).forEach(function(k){ var p=picks[k]; if(p.checked) s+=p.hours; }); return r2(s); }
+  function updateRt(){
+    var use=selectedHours(), after=r2(currentAvailable()-use);
+    document.getElementById("rtUse").textContent=fmtH(use)+"h";
+    document.getElementById("rtAfter").textContent=fmtH(Math.max(0,after))+"h";
+    document.getElementById("rtAfterCard").classList.toggle("neg", after<0);
+  }
+  document.getElementById("lvSave").addEventListener("click",function(){
+    var leaveDate=isoOf("lvDate");
+    if(!leaveDate){ toast("请选择调休使用日期"); return; }
+    var wasEdit=!!editingLeave;
+    // 先校验再落库：校验不通过时直接中止，避免「原抵扣已撤销、新值却未写入」的内存/存储不一致
+    var chosen=Object.keys(picks).map(Number).filter(function(rid){ return picks[rid].checked && picks[rid].hours>0; });
+    if(!chosen.length){ toast("请至少勾选一项加班时长"); return; }
+    // 修改模式：校验通过后再撤销原调休事件（删除该 leaveDate 的全部抵扣），随后按新选择重算
+    if(wasEdit){
+      records.forEach(function(r){ r.deductions=(r.deductions||[]).filter(function(x){ return x.leaveDate!==editingLeave; }); });
+    }
+    var total=0;
+    chosen.forEach(function(rid){
+      var r=records.filter(function(x){return x.id===rid;})[0]; if(!r) return;
+      var add=picks[rid].hours, rem=remainOf(r);
+      if(add>rem) add=rem;
+      if(add<=0) return;
+      r.deductions=r.deductions||[];
+      r.deductions.push({leaveDate:leaveDate, hours:r2(add)});
+      total+=add;
+    });
+    editingLeave=null;
+    persist(); renderAll(); closeSheets();
+    toast((wasEdit?"已更新 ":"已记录 ")+ymdWd(leaveDate)+" 调休抵扣 "+fmtH(total)+" 小时");
+  });
+
+  // ---- 删除 / 撤销（只有点击「已滑出」的动作按钮才执行；滑动本身绝不删除） ----
+  document.getElementById("recList").addEventListener("click",function(e){
+    var act=e.target.closest("[data-act]"); if(!act) return;
+    var wrap=act.closest(".swipe");
+    if(!wrap || !wrap.classList.contains("is-open")) return;   // 未滑出时忽略
+    var id=Number(act.dataset.id);
+    if(act.dataset.act==="edit"){ openEditRecord(id); return; }   // 修改：进入编辑界面
+    records=records.filter(function(r){return r.id!==id;});
+    persist(); renderAll(); toast("已删除加班记录");
+  });
+  document.getElementById("leaveList").addEventListener("click",function(e){
+    var act=e.target.closest("[data-act]"); if(!act) return;
+    var wrap=act.closest(".swipe");
+    if(!wrap || !wrap.classList.contains("is-open")) return;   // 未滑出时忽略
+    var lv=act.dataset.lv;
+    if(act.dataset.act==="edit"){ openEditLeave(lv); return; }   // 修改：进入调休编辑界面
+    records.forEach(function(r){ r.deductions=(r.deductions||[]).filter(function(x){ return x.leaveDate!==lv; }); });
+    persist(); renderAll(); toast("已撤销 "+ymdWd(lv)+" 调休记录");
+  });
+
+  // ============ 左滑操作交互（移动端滑动手势，item 跟随左移、右侧露出「修改 + 删除/撤销」） ============
+  // 关键：滑动只负责「露出/收起」按钮，绝不删除；删除只能通过点击已露出的按钮触发。
+  var swipeBound=new WeakSet();
+  function attachSwipe(wrap){
+    if(swipeBound.has(wrap)) return;
+    swipeBound.add(wrap);
+    var content=wrap.querySelector(".swipe-content"); if(!content) return;
+    var ACTION=152;                              // 两个动作按钮各 76px（修改 + 删除/撤销）
+    var open=false, dragging=false, moved=false, startX=0, startY=0, cur=0, pid=null;
+    var suppressClick=false, supTimer=null;   // 滑动后短暂屏蔽合成 click，避免「一滑就删」
+    function setOpen(v){
+      open=v;
+      wrap.classList.toggle("is-open", v);    // 供删除/撤销处理器判定「按钮是否已滑出」
+      wrap.classList.add("revealing");        // 展开/收起动画期间保持蓝底，避免回弹时角部回白
+      content.style.transition="transform .25s";
+      content.style.transform="translateX("+(v?-ACTION:0)+"px)";
+      clearTimeout(wrap._revealT);
+      wrap._revealT=setTimeout(function(){
+        content.style.transition="";
+        if(!open) wrap.classList.remove("revealing");   // 完全收起后才撤蓝底（此时内容已完全盖住容器）
+      }, 260);
+    }
+    content.addEventListener("pointerdown",function(e){
+      startX=e.clientX; startY=e.clientY; dragging=true; moved=false; pid=e.pointerId;
+      content.style.transition="none";
+      if(!open) wrap.classList.remove("revealing");   // 由闭合态起手：先撤蓝底，待真正左移露出时再叠加
+      closeAllSwipes(wrap);
+    }, {passive:true});
+    content.addEventListener("pointermove",function(e){
+      if(!dragging) return;
+      var dx=e.clientX-startX, dy=e.clientY-startY;
+      if(!moved){
+        if(Math.abs(dx)>Math.abs(dy) && Math.abs(dx)>6){
+          moved=true;
+          if(content.setPointerCapture){ try{ content.setPointerCapture(pid); }catch(_){} }
+        } else if(Math.abs(dy)>Math.abs(dx) && Math.abs(dy)>6){ dragging=false; return; }
+        else return;
+      }
+      if(e.cancelable) e.preventDefault();
+      var t=(open?(-ACTION+dx):dx);
+      t=Math.max(-ACTION, Math.min(0, t));
+      cur=t; content.style.transform="translateX("+t+"px)";
+      // 内容一旦左移露出动作条，即让容器转为蓝底（与最内侧「修改」按钮同色、与拖动结束态一致）；
+      // 移回 0（内容完全盖住）时撤除，避免闭合态四角渗色。
+      wrap.classList.toggle("revealing", t < -0.5);
+    }, {passive:false});
+    function end(){
+      if(!dragging) return; dragging=false;
+      if(moved){
+        // 本次是「滑动」而非「点击」：吞掉浏览器在滑动结束后补发的 click
+        suppressClick=true; clearTimeout(supTimer);
+        supTimer=setTimeout(function(){ suppressClick=false; }, 400);
+        if(cur<=-ACTION/2) setOpen(true); else setOpen(false);
+      } else if(open){
+        setOpen(false);   // 纯点击已展开的卡片 -> 收起
+      } else {
+        content.style.transition="";
+      }
+    }
+    content.addEventListener("pointerup", end);
+    content.addEventListener("pointercancel", end);
+    // 捕获阶段拦截：滑动后紧跟的合成 click 一律不冒泡到删除/撤销处理器
+    wrap.addEventListener("click", function(e){
+      if(suppressClick){ e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    wrap._close=function(){ if(open) setOpen(false); };
+  }
+  function closeAllSwipes(except){
+    document.querySelectorAll(".swipe").forEach(function(w){ if(w!==except && w._close) w._close(); });
+  }
+  function bindSwipe(root){
+    if(root) root.querySelectorAll(".swipe").forEach(attachSwipe);
+  }
+
+  // ============ 自定义日期选择器（与记账原型完全一致：自绘日历 + 年/月下钻） ============
+  var TODAY = todayStr();
+  function isoOf(id){ var el=document.getElementById(id); return (el && el.dataset.iso) || ""; }
+  function setIso(id, iso){
+    var el=document.getElementById(id); if(!el) return;
+    if(iso){ el.dataset.iso=iso; el.value=iso.replace(/-/g,"/"); }
+    else { el.dataset.iso=""; el.value=""; }
+    el.dispatchEvent(new Event("change"));
+  }
+  var dpMask=document.createElement("div"); dpMask.className="dp-mask";
+  dpMask.innerHTML='<div class="dp-panel">'+
+    '<div class="dp-top">'+
+      '<button class="dp-btn" id="dpPrevYear" type="button" title="上一年">«</button>'+
+      '<button class="dp-btn" id="dpPrevMonth" type="button" title="上一月">‹</button>'+
+      '<div class="dp-title" id="dpTitle"></div>'+
+      '<button class="dp-btn" id="dpNextMonth" type="button" title="下一月">›</button>'+
+      '<button class="dp-btn" id="dpNextYear" type="button" title="下一年">»</button>'+
+    '</div>'+
+    '<div id="dpBody"></div>'+
+    '<div class="dp-foot"><button id="dpClear" type="button">清除</button><button id="dpToday" type="button">今天</button></div>'+
+  '</div>';
+  document.querySelector(".phone").appendChild(dpMask);
+  var dpTarget=null, dpView="date", dpY, dpM;
+  function dpPad(n){ return (n<10?"0":"")+n; }
+  function dpRender(){
+    var body=document.getElementById("dpBody"), title=document.getElementById("dpTitle");
+    title.onclick=function(){ dpView = (dpView==="date") ? "month" : (dpView==="month" ? "year" : "date"); dpRender(); };
+    if(dpView==="date"){
+      title.textContent=dpY+"年 "+dpM+"月";
+      var start=new Date(dpY, dpM-1, 1); start.setDate(1-start.getDay());
+      var selIso=dpTarget ? dpTarget.dataset.iso : "";
+      var html='<div class="dp-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div><div class="dp-grid">';
+      for(var i=0;i<42;i++){
+        var d=new Date(start); d.setDate(start.getDate()+i);
+        var iso=d.getFullYear()+"-"+dpPad(d.getMonth()+1)+"-"+dpPad(d.getDate());
+        var cls="dp-cell"+(d.getMonth()+1!==dpM?" dim":"")+(iso===selIso?" sel":"")+(iso===TODAY?" today":"");
+        html+='<button class="'+cls+'" type="button" data-iso="'+iso+'">'+d.getDate()+"</button>";
+      }
+      body.innerHTML=html+"</div>";
+      body.querySelectorAll(".dp-cell").forEach(function(b){
+        b.addEventListener("click", function(){
+          setIso(dpTarget.id, b.dataset.iso);
+          if(dpTarget.id==="expDate" && typeof updateTodayExp==="function") updateTodayExp();
+          dpClose();
+        });
+      });
+    } else if(dpView==="month"){
+      title.textContent=dpY+"年";
+      var html2='<div class="dp-grid cols3">';
+      for(var m=1;m<=12;m++){ html2+='<button class="dp-cell big'+(m===dpM?" sel":"")+'" type="button" data-m="'+m+'">'+m+" 月</button>"; }
+      body.innerHTML=html2+"</div>";
+      body.querySelectorAll(".dp-cell").forEach(function(b){ b.addEventListener("click", function(){ dpM=+b.dataset.m; dpView="date"; dpRender(); }); });
+    } else {
+      var y0=Math.floor(dpY/10)*10;
+      title.textContent=y0+" - "+(y0+9);
+      var html3='<div class="dp-grid cols3">';
+      for(var yy=y0-1; yy<=y0+10; yy++){
+        var dimY=(yy<y0||yy>y0+9);
+        html3+='<button class="dp-cell big'+(dimY?" dim":"")+(yy===dpY?" sel":"")+'" type="button" data-y="'+yy+'">'+yy+"</button>";
+      }
+      body.innerHTML=html3+"</div>";
+      body.querySelectorAll(".dp-cell").forEach(function(b){ b.addEventListener("click", function(){ dpY=+b.dataset.y; dpView="month"; dpRender(); }); });
+    }
+  }
+  function dpOpen(input){
+    dpTarget=input;
+    var iso=input.dataset.iso;
+    if(iso){ dpY=+iso.slice(0,4); dpM=+iso.slice(5,7); }
+    else { var n=new Date(); dpY=n.getFullYear(); dpM=n.getMonth()+1; }
+    dpView="date"; dpMask.classList.add("show"); dpRender();
+  }
+  function dpClose(){ dpMask.classList.remove("show"); dpTarget=null; }
+  document.getElementById("dpPrevYear").addEventListener("click", function(){ if(dpView==="year") dpY-=10; else dpY-=1; dpRender(); });
+  document.getElementById("dpNextYear").addEventListener("click", function(){ if(dpView==="year") dpY+=10; else dpY+=1; dpRender(); });
+  document.getElementById("dpPrevMonth").addEventListener("click", function(){
+    if(dpView==="date"){ dpM--; if(dpM<1){ dpM=12; dpY--; } } else if(dpView==="month"){ dpY-=1; } else { dpY-=10; }
+    dpRender();
+  });
+  document.getElementById("dpNextMonth").addEventListener("click", function(){
+    if(dpView==="date"){ dpM++; if(dpM>12){ dpM=1; dpY++; } } else if(dpView==="month"){ dpY+=1; } else { dpY+=10; }
+    dpRender();
+  });
+  document.getElementById("dpClear").addEventListener("click", function(){ if(dpTarget) setIso(dpTarget.id,""); dpClose(); });
+  document.getElementById("dpToday").addEventListener("click", function(){ if(dpTarget){ setIso(dpTarget.id, TODAY); if(dpTarget.id==="expDate" && typeof updateTodayExp==="function") updateTodayExp(); } dpClose(); });
+  dpMask.addEventListener("click", function(e){ if(e.target===dpMask) dpClose(); });
+  document.querySelectorAll("input.date-input").forEach(function(inp){ inp.addEventListener("click", function(){ dpOpen(inp); }); });
+
+  // ---- toast / clock ----
+  var toastTimer;
+  function toast(msg){
+    var t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.classList.remove("show");},1900);
+  }
+
+  /* ============================================================
+     数据导入 / 导出
+       · 导出：生成 JSON 备份后弹出「去向选择」——保存到本地 / 发送给微信好友 / 复制为文本
+       · 导入：弹出「来源选择」——从本地文件选择 / 从微信聊天文件选择
+       · 合并规则：按记录 id 去重（同 id 覆盖，新 id 追加），跳过缺 id/date 的脏数据
+     真机（微信小程序）映射：
+       · 微信聊天文件 → wx.chooseMessageFile({count:1,type:'file',extension:['json']})
+                        + wx.getFileSystemManager().readFile({encoding:'utf8'})
+       · 发送给好友   → 先 writeFile 到临时路径，再 wx.shareFileMessage({filePath,fileName})
+       · 保存到本地   → wx.saveFileToDisk({filePath})（PC 端）或提示用户转发到「文件传输助手」
+     原型在浏览器中无法访问 wx API，故用本地文件选择器 + 演示文件/联系人列表等价模拟。
+     ============================================================ */
+  var SCHEMA_VERSION=3;
+  var APP_NAME="拾时簿 GleanTime";   // 小程序名称
+  var APP_VERSION="v1.0";          // 小程序版本号：时长统计页底部显示，改此一处即可全局更新
+  var inWeChat=(typeof wx!=="undefined" && wx && typeof wx.chooseMessageFile==="function");
+
+  // 微信聊天中的备份文件（原型演示数据，真机由 chooseMessageFile 返回）
+  var WX_FILES=[
+    {name:"overtime_records_2026-10-04.json", from:"文件传输助手", size:"1.6 KB", time:"今天 09:12",
+     demo:[{id:"demo-20261004a", date:"2026-10-04", start:"19:00", end:"22:00", reason:"示例：版本发布值守", type:"comp", valid:3, deductions:[]}]},
+    {name:"overtime_records_2026-09-28.json", from:"加班记录备份群", size:"1.2 KB", time:"09-28 20:05",
+     demo:[{id:"demo-20260928a", date:"2026-09-28", start:"18:30", end:"21:00", reason:"示例：客户需求支持", type:"pr", valid:2.5, deductions:[]}]}
+  ];
+  // 可发送的微信联系人（原型演示数据，真机由 shareFileMessage 唤起微信原生分享面板）
+  var WX_FRIENDS=[
+    {n:"文件传输助手", d:"发给自己，换机时随时找回", t:"file"},
+    {n:"我的电脑", d:"电脑端微信直接接收文件", t:"pc"},
+    {n:"加班记录备份群", d:"与同事共享备份文件", t:"group"}
+  ];
+
+  /* ---------- 通用小工具（HTML 转义复用全局 esc，见上方 statusOf 之前） ---------- */
+  function buildPayload(){
+    return {schemaVersion:SCHEMA_VERSION, app:"glean-time-overtime",
+      exportedAt:new Date().toISOString(), records:records};
+  }
+  function exportJson(){ return JSON.stringify(buildPayload(),null,2); }
+  function exportFileName(){ return "overtime_records_"+new Date().toISOString().slice(0,10)+".json"; }
+  function fmtSize(n){ return n<1024 ? n+" B" : (n/1024).toFixed(1)+" KB"; }
+  function fallbackCopy(text){
+    try{ var ta=document.createElement("textarea"); ta.value=text;
+      ta.style.position="fixed"; ta.style.top="-9999px"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var ok=document.execCommand("copy"); document.body.removeChild(ta); return ok;
+    }catch(e){ return false; }
+  }
+  // 复制文本：clipboard API → execCommand 兜底；两者都失败时交给 onFail（如展示可手动选中的文本框），
+  // 避免只弹一句「复制失败」却无处可复制的死路。
+  function copyText(text,opts){
+    opts=opts||{};
+    var done=function(){ toast(opts.msg||"已复制到剪贴板"); if(opts.onOk) opts.onOk(); };
+    var fail=function(){ if(opts.onFail) opts.onFail(); else toast("复制失败，请重试"); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done,function(){ if(fallbackCopy(text)) done(); else fail(); });
+    }else{ if(fallbackCopy(text)) done(); else fail(); }
+  }
+  function downloadJSON(text,name){
+    try{
+      var blob=new Blob([text],{type:"application/json"}); var url=URL.createObjectURL(blob);
+      var a=document.createElement("a"); a.href=url; a.download=name||exportFileName();
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); },1500);
+      return true;
+    }catch(e){ return false; }
+  }
+
+  /* ---------- 导入：弹层步骤切换 ---------- */
+  function impResetStep(){
+    document.getElementById("impStep1").hidden=false;
+    document.getElementById("impStep2").hidden=true;
+    document.getElementById("impBack").hidden=true;
+    document.getElementById("impTitle").textContent="导入数据";
+    document.getElementById("impSub").textContent="选择数据来源；导入后按记录 ID 合并去重（同 ID 覆盖，新 ID 追加）";
+  }
+  function impGotoStep2(){
+    document.getElementById("impStep1").hidden=true;
+    document.getElementById("impStep2").hidden=false;
+    document.getElementById("impBack").hidden=false;
+    document.getElementById("impTitle").textContent="微信聊天文件";
+    document.getElementById("impSub").textContent="选择聊天中收到的备份文件（原型演示）";
+    renderWxFiles();
+  }
+  function openImportSheet(){ impResetStep(); openSheet(sheetImport); }
+
+  function renderWxFiles(){
+    var html="";
+    WX_FILES.forEach(function(f,i){
+      html+='<button class="io-pick" type="button" data-i="'+i+'">'+
+        '<span class="io-ico doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>'+
+        '<span class="io-txt"><b>'+esc(f.name)+'</b><i>来自「'+esc(f.from)+'」 · '+esc(f.size)+' · '+esc(f.time)+'</i></span>'+
+        '<span class="io-arrow">›</span></button>';
+    });
+    document.getElementById("wxfList").innerHTML=html;
+  }
+
+  /* ---------- 导出：弹层步骤切换 ---------- */
+  function expResetStep(){
+    document.getElementById("expStep1").hidden=false;
+    document.getElementById("expStep2").hidden=true;
+    document.getElementById("expStep3").hidden=true;
+    document.getElementById("expBack").hidden=true;
+    document.getElementById("expTitle").textContent="导出完成";
+    document.getElementById("expSub").textContent="备份已生成，请选择下一步操作";
+  }
+  function expGotoStep2(){
+    document.getElementById("expStep1").hidden=true;
+    document.getElementById("expStep2").hidden=false;
+    document.getElementById("expBack").hidden=false;
+    document.getElementById("expTitle").textContent="发送给微信好友";
+    document.getElementById("expSub").textContent="选择联系人，把备份文件发送给对方（原型演示）";
+    renderWxFriends();
+  }
+  function renderWxFriends(){
+    var icon=function(t){
+      if(t==="pc") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+      if(t==="group") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 19.2a6.2 6.2 0 0 1 12.4 0"/><path d="M16 6.2a3 3 0 0 1 0 5.6M17.6 19.2a5.6 5.6 0 0 0-1.4-3.7"/></svg>';
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.4"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>';
+    };
+    var html="";
+    WX_FRIENDS.forEach(function(f,i){
+      html+='<button class="io-pick" type="button" data-i="'+i+'">'+
+        '<span class="io-ico wx">'+icon(f.t)+'</span>'+
+        '<span class="io-txt"><b>'+esc(f.n)+'</b><i>'+esc(f.d)+'</i></span>'+
+        '<span class="io-arrow">›</span></button>';
+    });
+    document.getElementById("wxFriendList").innerHTML=html;
+  }
+  // 兜底：自动复制被拦截时，把 JSON 落到可选中的只读文本框，用户可手动复制
+  function expGotoStep3(json){
+    document.getElementById("expStep1").hidden=true;
+    document.getElementById("expStep2").hidden=true;
+    document.getElementById("expStep3").hidden=false;
+    document.getElementById("expBack").hidden=false;
+    document.getElementById("expTitle").textContent="手动复制";
+    document.getElementById("expSub").textContent="自动复制被浏览器拦截，请手动选择文本复制";
+    var ta=document.getElementById("expRaw");
+    ta.value=json;
+    setTimeout(function(){ try{ ta.focus(); ta.select(); }catch(e){} },30);
+  }
+
+  /* ---------- 导出：入口与去向 ---------- */
+  function exportData(){
+    var json=exportJson(), name=exportFileName();
+    document.getElementById("expFile").textContent=name;
+    document.getElementById("expMeta").textContent=records.length+" 条记录 · "+fmtSize(new Blob([json]).size);
+    expResetStep();
+    openSheet(sheetExport);
+  }
+
+  /* ---------- 导入：读取与合并 ---------- */
+  // 记录完整性校验：id / date / 起止时间缺一不可。
+  // 缺 start|end 的记录会让 calcDur 拿不到可解析的时间，进而毁掉整页统计与列表渲染，
+  // 因此这类脏数据在入口处直接跳过并计数，而不是让它进内存。
+  function isImportable(n){
+    return !!(n && typeof n==="object" && n.id!=null && n.date && n.start && n.end);
+  }
+  function mergeRecords(list){
+    var merged={}, kept=0, added=0, skipped=0;
+    records.forEach(function(r){ merged[r.id]=r; });
+    list.forEach(function(n){
+      if(!isImportable(n)){ skipped++; return; }         // 跳过结构不完整的记录
+      if(merged[n.id]){ merged[n.id]=norm(n); kept++; } else { merged[n.id]=norm(n); added++; }
+    });
+    records=Object.keys(merged).map(function(k){ return merged[k]; });
+    persist(); renderAll();
+    return {added:added, kept:kept, skipped:skipped};
+  }
+  function applyImport(text,label){
+    text=(text||"").trim();
+    if(!text){ toast("文件内容为空"); return; }
+    var payload; try{ payload=JSON.parse(text); }catch(e){ toast("JSON 解析失败，请检查文件内容"); return; }
+    var list=Array.isArray(payload) ? payload : (payload && payload.records);
+    if(!Array.isArray(list)){ toast("数据格式不正确（缺少 records 数组）"); return; }
+    var r=mergeRecords(list);
+    closeSheets();
+    toast((label?"已导入「"+label+"」":"导入完成")+"：新增 "+r.added+" 条 · 覆盖 "+r.kept+" 条"
+      +(r.skipped?" · 跳过 "+r.skipped+" 条异常":""));
+  }
+  function readLocalFile(file){
+    if(!file) return;
+    var nm=(file.name||"").toLowerCase();
+    if(!/[.]json$/.test(nm) && !/json/i.test(file.type||"")){
+      toast("请选择 .json 格式的备份文件"); return;
+    }
+    var reader=new FileReader();
+    reader.onload=function(){ applyImport(String(reader.result||""), file.name); };
+    reader.onerror=function(){ toast("文件读取失败，请重试"); };
+    reader.readAsText(file);
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  var btnExport=document.getElementById("btnExport");
+  var btnImport=document.getElementById("btnImport");
+  if(btnExport) btnExport.addEventListener("click", exportData);
+  if(btnImport) btnImport.addEventListener("click", openImportSheet);
+
+  var impFile=document.getElementById("impFile");
+  document.getElementById("impLocal").addEventListener("click", function(){ impFile.click(); });
+  document.getElementById("impWechat").addEventListener("click", impGotoStep2);
+  document.getElementById("impBack").addEventListener("click", impResetStep);
+  document.getElementById("impCancel").addEventListener("click", closeSheets);
+  impFile.addEventListener("change", function(e){
+    var f=e.target.files && e.target.files[0];
+    readLocalFile(f);
+    e.target.value="";                                  // 允许重复选择同一个文件
+  });
+  document.getElementById("wxfList").addEventListener("click", function(e){
+    var row=e.target.closest && e.target.closest(".io-pick"); if(!row) return;
+    var f=WX_FILES[+row.dataset.i]; if(!f) return;
+    applyImport(JSON.stringify({schemaVersion:SCHEMA_VERSION, app:"glean-time-overtime", records:f.demo}),
+      f.name+"（演示）");
+  });
+
+  document.getElementById("expLocal").addEventListener("click", function(){
+    var ok=downloadJSON(exportJson(), exportFileName());
+    if(ok){ closeSheets(); toast("已保存到本地："+exportFileName()); }
+    else copyText(exportJson(),{ msg:"当前环境不支持下载，已改为复制到剪贴板",
+      onOk:closeSheets, onFail:function(){ expGotoStep3(exportJson()); } });
+  });
+  document.getElementById("expWechat").addEventListener("click", expGotoStep2);
+  document.getElementById("expCopy").addEventListener("click", function(){
+    var json=exportJson();
+    copyText(json,{ msg:"已复制导出数据到剪贴板",
+      onOk:closeSheets, onFail:function(){ expGotoStep3(json); } });
+  });
+  document.getElementById("expRetryCopy").addEventListener("click", function(){
+    var ta=document.getElementById("expRaw");
+    try{ ta.focus(); ta.select(); }catch(e){}
+    var ok=false; try{ ok=document.execCommand("copy"); }catch(e){}
+    if(ok){ toast("已复制导出数据到剪贴板"); closeSheets(); }
+    else toast("已全选，请按 Ctrl / Cmd + C 完成复制");
+  });
+  // 点文本框即全选，省去用户手动拖选
+  document.getElementById("expRaw").addEventListener("click", function(){
+    try{ this.focus(); this.select(); }catch(e){}
+  });
+  document.getElementById("expBack").addEventListener("click", expResetStep);
+  document.getElementById("expCancel").addEventListener("click", closeSheets);
+  document.getElementById("wxFriendList").addEventListener("click", function(e){
+    var row=e.target.closest && e.target.closest(".io-pick"); if(!row) return;
+    var f=WX_FRIENDS[+row.dataset.i]; if(!f) return;
+    var name=f.n, json=exportJson(), fname=exportFileName();
+    if(inWeChat && typeof wx.shareFileMessage==="function"){
+      // 真机：先写入临时文件再调微信原生分享面板
+      try{
+        var fs=wx.getFileSystemManager(), p=wx.env.USER_DATA_PATH+"/"+fname;
+        fs.writeFile({filePath:p, data:json, encoding:"utf8", fail:function(){ toast("文件写入失败"); }});
+        wx.shareFileMessage({filePath:p, fileName:fname, fail:function(){ toast("已取消发送"); }});
+      }catch(err){ toast("当前环境不支持文件分享"); }
+    }else{
+      closeSheets();
+      toast("已发送给「"+name+"」（原型演示）");
+    }
+  });
+  function tick(){
+    var n=new Date();
+    document.getElementById("clock").textContent=String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");
+  }
+  tick(); setInterval(tick,10000);
+
+  /* ============================================================
+     右侧「交互说明」面板联动（原型预览专用）
+       · 页面联动：底部导航 ⇄ 面板页签 双向同步（switchTab → specSyncPage）
+       · 元素联动：点击手机内任意带 data-spec 的元素 → 高亮对应说明条目
+       · 反向提示：悬停说明条目 → 手机内对应元素描边脉冲
+     ============================================================ */
+  var specEl=document.getElementById("spec");
+  var specBodyEl=document.getElementById("specBody");
+  function specClearHL(){
+    if(!specEl) return;
+    specEl.querySelectorAll(".sp-item.hl, .sp-item.flash").forEach(function(x){ x.classList.remove("hl","flash"); });
+    document.querySelectorAll(".spec-focus").forEach(function(x){ x.classList.remove("spec-focus"); });
+  }
+  function specSyncPage(page){
+    if(!specEl || !page) return;
+    specEl.querySelectorAll(".spec-tab").forEach(function(b){ b.classList.toggle("on", b.dataset.page===page); });
+    specEl.querySelectorAll(".sp-page").forEach(function(s){ s.classList.toggle("on", s.dataset.page===page); });
+    if(specBodyEl) specBodyEl.scrollTop=0;
+    specClearHL();
+  }
+  // 交互说明模块展示顺序固定为：1.加班记录 2.调休记录 3.时长统计（与底部导航顺序无关，按需求指定）
+  var SPEC_ORDER=["records","leaves","stats"];
+  function specReorder(){
+    [["#specTabs",".spec-tab"],["#specBody",".sp-page"]].forEach(function(pair){
+      var box=document.querySelector(pair[0]); if(!box) return;
+      var map={};
+      box.querySelectorAll(pair[1]).forEach(function(n){ map[n.dataset.page]=n; });
+      SPEC_ORDER.forEach(function(pg){ if(map[pg]) box.appendChild(map[pg]); });
+    });
+  }
+  function specFindItem(id){
+    if(!specEl) return null;
+    var active=specEl.querySelector(".sp-page.on");
+    return (active && active.querySelector('.sp-item[data-spec="'+id+'"]'))
+        || specEl.querySelector('.sp-item[data-spec="'+id+'"]');
+  }
+  // 点击手机内元素 → 定位并高亮对应说明条目（必要时先把面板切到该说明所属页）
+  function specHighlight(id){
+    if(!specEl || !id) return;
+    var node=specFindItem(id); if(!node) return;
+    var page=node.closest(".sp-page");
+    if(page && !page.classList.contains("on")) specSyncPage(page.dataset.page);
+    node=specFindItem(id) || node;
+    specEl.querySelectorAll(".sp-item.hl, .sp-item.flash").forEach(function(x){ x.classList.remove("hl","flash"); });
+    node.classList.add("hl","flash");
+    if(specBodyEl){
+      var br=specBodyEl.getBoundingClientRect(), nr=node.getBoundingClientRect();
+      var rel=nr.top-br.top;
+      if(rel<10 || rel+nr.height>specBodyEl.clientHeight-10){
+        specBodyEl.scrollTop += rel - Math.max(12,(specBodyEl.clientHeight-nr.height)/2);
+      }
+    }
+  }
+  // 悬停说明条目 → 手机内对应元素描边（提示「说明 ↔ 界面」的对应关系）
+  function specFocusTarget(id,on){
+    document.querySelectorAll('.phone [data-spec="'+id+'"]').forEach(function(el){ el.classList.toggle("spec-focus", !!on); });
+  }
+  if(specEl){
+    specEl.querySelectorAll(".sp-item[data-spec]").forEach(function(it){
+      var id=it.getAttribute("data-spec");
+      it.addEventListener("mouseenter", function(){ specFocusTarget(id,true); });
+      it.addEventListener("mouseleave", function(){ specFocusTarget(id,false); });
+      it.addEventListener("click", function(){ specHighlight(id); specFocusTarget(id,true); });
+    });
+    var specTabsEl=document.getElementById("specTabs");
+    if(specTabsEl) specTabsEl.addEventListener("click", function(e){
+      var b=e.target.closest ? e.target.closest(".spec-tab") : null; if(!b) return;
+      switchTab(b.dataset.page);          // 反向驱动手机切页（内部会调用 specSyncPage）
+    });
+    var phoneEl=document.querySelector(".phone");
+    if(phoneEl) phoneEl.addEventListener("click", function(e){
+      var t=e.target.closest ? e.target.closest("[data-spec]") : null;
+      if(!t) return;
+      specHighlight(t.getAttribute("data-spec"));
+    }, true);   // 捕获阶段：不受列表滑动等内部 stopPropagation 影响
+  }
+
+  function renderAll(){ renderRecords(); renderStats(); renderLeaves(); }
+  renderAll(); updateFab();
+  // 小程序版本号（时长统计页底部）：由 APP_VERSION 常量统一定义，改常量即全局更新
+  var avEl=document.getElementById("appVersion");
+  if(avEl){ avEl.innerHTML=APP_NAME+" <b>"+APP_VERSION+"</b>"; }
+  specReorder();              // 按 SPEC_ORDER 重排交互说明模块（加班记录→调休记录→时长统计）
+  specSyncPage(curTab);       // 初始化右侧说明面板与当前页对齐
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>拾时簿 GleanTime · 头像方案 D（时间轴拾起 · 抽象）</title>
+  <defs>
+    <linearGradient id="gbD" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5B96F8"/>
+      <stop offset="1" stop-color="#2F63CF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#gbD)"/>
+  <path d="M150 392 Q 256 300 362 168" fill="none" stroke="#FFFFFF"
+        stroke-width="28" stroke-linecap="round" opacity="0.96"/>
+  <circle cx="150" cy="392" r="22" fill="#FFFFFF"/>
+  <circle cx="196" cy="356" r="16" fill="#FFFFFF"/>
+  <circle cx="256" cy="318" r="16" fill="#FFFFFF"/>
+  <circle cx="316" cy="240" r="16" fill="#FFFFFF"/>
+  <circle cx="362" cy="168" r="36" fill="#27BD86"/>
+</svg>

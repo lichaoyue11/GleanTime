@@ -1,0 +1,17 @@
+<view wx:if="{{show}}" class="pp-mask" catchtap="noop">
+  <view class="pp-panel">
+    <view class="pp-title">隐私授权提醒</view>
+    <view class="pp-body">
+      <text class="pp-p">本小程序遵循最小必要原则处理你的信息：</text>
+      <text class="pp-p">· 所有加班 / 调休数据仅保存在你的设备本地（wx.storage），不会上传任何服务器；</text>
+      <text class="pp-p">·「导入数据」会读取你主动从微信聊天选择的备份文件；</text>
+      <text class="pp-p">·「导出备份」会生成文件并分享给好友、或复制文本到剪贴板，均在你确认后执行。</text>
+      <text class="pp-p">完整说明请在下方查看微信「隐私保护指引」。</text>
+    </view>
+    <view class="pp-contract" bindtap="openContract">查看{{privacyContractName}}</view>
+    <view class="pp-actions">
+      <view class="pp-btn pp-btn-ghost" catchtap="handleDisagree">暂不使用</view>
+      <view class="pp-btn pp-btn-main" catchtap="handleAgree">同意并继续</view>
+    </view>
+  </view>
+</view>
